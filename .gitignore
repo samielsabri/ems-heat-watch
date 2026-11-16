@@ -8,3 +8,4 @@ report/
 out/
 data/synthetic/
 .DS_Store
+raw_agg/
