@@ -6,6 +6,9 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from emsheat.syndromes import HEAT_SYNDROME  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 rep = Path(sys.argv[1] if len(sys.argv) > 1 else ROOT / "out" / "report")
 syn = ROOT / "data" / "synthetic"
@@ -17,14 +20,14 @@ print("1. Call-type screen (training period)")
 true_pos = {k for k, v in truth["logrr_per_degC"].items() if v > 0}
 found = set(summ["heat_sensitive"])
 print(f"   true heat-sensitive: {sorted(true_pos)}")
-print(f"   detected (q<0.05):   {sorted(found)}")
+print(f"   detected (q<0.05, >= +2%/C): {sorted(found)}")
 print(f"   missed: {sorted(true_pos - found)}  false positives: {sorted(found - true_pos)}")
 
 outcomes = {"heat_coded_calls": summ["heat_coded"],
-            "heat_sensitive_syndrome": [t for t in summ["heat_sensitive"] if t not in summ["heat_coded"]],
+            "heat_syndrome_pre_specified": [t for t in HEAT_SYNDROME if t in set(te["call_type"])],
             "all_ems_calls": sorted(te["call_type"].unique())}
 print("\n2. Model-expected vs true heat-attributable calls (evaluation period)")
-print(f"   {'outcome':26s} {'true total':>10s} {'model':>8s} {'ratio':>6s} {'r(daily)':>8s} | alarm sens (true RR>1.25) / false alarm rate (true RR<1.02)")
+print(f"   {'outcome':26s} {'true total':>10s} {'model':>8s} {'ratio':>6s} {'r(daily)':>8s} | alarm sens (true RR>1.25) / false alarm rate (true RR<1.02); alarm = obs above normal-Tmax limit")
 for name, types in outcomes.items():
     f = rep / f"surveillance_{name}.csv"
     if not f.exists() or not types:
@@ -35,8 +38,8 @@ for name, types in outcomes.items():
     rr = t["lam_full"] / t["lam_noheat"]
     r = np.corrcoef(true_heat, s["heat_expected"])[0, 1]
     hot, cool = rr > 1.25, rr < 1.02
-    sens = s.loc[hot, "alarm_excess"].mean() if hot.any() else np.nan
-    far = s.loc[cool, "alarm_excess"].mean()
+    sens = s.loc[hot, "alarm"].mean() if hot.any() else np.nan
+    far = s.loc[cool, "alarm"].mean()
     print(f"   {name:26s} {true_heat.sum():10.0f} {s['heat_expected'].sum():8.0f} "
           f"{s['heat_expected'].sum() / true_heat.sum():6.2f} {r:8.3f} | {sens:.2f} ({hot.sum()} days) / {far:.4f} ({cool.sum()} days)")
 

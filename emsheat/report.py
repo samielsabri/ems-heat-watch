@@ -46,15 +46,15 @@ def fig_operational(ctx, name, days=60):
     lo, hi = s.index.min(), (fc.index.max() if fc is not None and len(fc) else s.index.max())
     _shade_waves(ax, ctx["events"], lo, hi)
     _shade_waves(axt, ctx["events"], lo, hi)
-    ax.fill_between(s.index, s["mu_base"], s["u_base"], color=BASE, alpha=0.10, lw=0, step="mid",
-                    label=f"seasonal expectation to alarm threshold")
-    ax.plot(s.index, s["mu_base"], color=BASE, lw=1.2, label="seasonal expectation (no heat)")
+    ref, uref = ("mu_norm", "u_norm") if "mu_norm" in s else ("mu_base", "u_base")
+    ax.fill_between(s.index, s[ref], s[uref], color=BASE, alpha=0.10, lw=0, step="mid",
+                    label=f"expected at normal Tmax to alarm threshold")
+    ax.plot(s.index, s[ref], color=BASE, lw=1.2, label="expected at normal Tmax for the date")
     ax.plot(s.index, s["mu_full"], color=HEATC, lw=1.1, ls="--", label="expected given temperature")
     ax.plot(s.index, s["obs"], color=OBS, lw=1.3, marker="o", ms=2.4, label="observed")
-    al = s[s["alarm_excess"]]
+    al = s[s["alarm"]]
     ax.scatter(al.index, al["obs"], s=42, facecolor="none", edgecolor=ALARM, lw=1.4, zorder=5, label="alarm")
     if fc is not None and len(fc):
-        ax.plot(fc.index, fc["mu_base"], color=BASE, lw=1.0, alpha=0.6)
         ax.plot(fc.index, fc["mu_full"], color=HEATC, lw=1.4, ls="--")
         ax.axvline(ctx["last"] + pd.Timedelta(hours=12), color=MUTED, lw=0.8)
         ax.text(ctx["last"] + pd.Timedelta(hours=18), ax.get_ylim()[1] * 0.97, "forecast", color=MUTED,
@@ -80,8 +80,9 @@ def fig_timeline(ctx, name):
     fig, ax = plt.subplots(figsize=(8.6, 2.9))
     _shade_waves(ax, ctx["events"], s.index.min(), s.index.max())
     ax.plot(s.index, s["obs"], color=OBS, lw=0.7, label="observed")
-    ax.plot(s.index, s["mu_base"], color=BASE, lw=1.1, label="seasonal expectation")
-    al = s[s["alarm_excess"]]
+    ref = "mu_norm" if "mu_norm" in s else "mu_base"
+    ax.plot(s.index, s[ref], color=BASE, lw=1.1, label="expected at normal Tmax")
+    al = s[s["alarm"]]
     ax.scatter(al.index, al["obs"], s=16, color=ALARM, zorder=5, label="alarm")
     ax.set_title(f"{name}: prospective surveillance over the evaluation period (heat waves shaded)")
     ax.set_ylabel("calls per day")
@@ -193,13 +194,13 @@ def write(ctx, out):
     fc = rp["forecast"]
     fc_heat = float(fc["heat_expected"].sum()) if fc is not None and len(fc) else 0.0
     fc_peak = fc["temp"].max() if fc is not None and len(fc) else np.nan
-    recent_alarms = int(s["alarm_excess"].iloc[-7:].sum())
+    recent_alarms = int(s["alarm"].iloc[-7:].sum())
 
     kp = [
         ("Data current to", fresh["last_complete"], f"{fresh['lag_days']} day(s) behind {fresh['asof']}", False),
-        (f"{prim}, latest day", f"{int(today['obs'])}", f"expected {today['mu_base']:.1f} (alarm > {today['u_base']:.0f})",
-         bool(today["alarm_excess"])),
-        ("Alarm days, last 7", f"{recent_alarms}", "observed above seasonal threshold", recent_alarms > 0),
+        (f"{prim}, latest day", f"{int(today['obs'])}", f"expected {today.get('mu_norm', today['mu_base']):.1f} at normal Tmax (alarm > {today.get('u_norm', today['u_base']):.0f})",
+         bool(today["alarm"])),
+        ("Alarm days, last 7", f"{recent_alarms}", "observed above the normal-temperature threshold", recent_alarms > 0),
         ("Forecast heat calls, next 7 days", f"{fc_heat:.0f}", f"peak forecast Tmax {fc_peak:.1f} °C", fc_heat >= 5),
     ]
     kpis = "".join(f"<div class='kpi{' warn' if w else ''}'><span>{html.escape(a)}</span><b>{html.escape(b)}</b>"
@@ -294,9 +295,9 @@ model with a natural spline of time, day of week and holidays. Fitted on the tra
 <h2>Which call types respond to heat</h2>
 <div class="grid2"><img src="data:image/png;base64,{fig_screen(ctx)}">
 {_table(scr, {"mean_daily": "{:.1f}", "%/°C": "{:+.1f}", "lo": "{:+.1f}", "hi": "{:+.1f}", "q": "{:.3g}"})}</div>
-<p class="note">Each final call type with ≥1 call/day was screened on the training period. Types with FDR q &lt; 0.05 and a positive
-effect form the heat-sensitive syndrome; dispatch codes matching the heat pattern are tracked separately as heat-coded calls.
-Selection uses training years only; alarms are evaluated afterwards.</p>
+<p class="note">Exploratory. Each final call type used throughout the training years (code variants merged) with ≥1 call/day was
+screened on the training period; listed as heat-sensitive if FDR q &lt; 0.05 and ≥ +2%/°C. The surveillance syndrome is NOT taken
+from this screen: it is pre-specified (emsheat/syndromes.py). Summer-behavioural types (injury, violence, drowning) can pass the screen.</p>
 {zblock}
 {'<h2>Next 7 days</h2>' + _table(fct, {"temp": "{:.1f}", "mu_base": "{:.1f}", "mu_full": "{:.1f}", "heat_expected": "{:+.1f}"}) if fct is not None else ''}
 
