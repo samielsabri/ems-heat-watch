@@ -30,3 +30,8 @@ python synth/make_synthetic.py && python synth/check_truth.py   # end-to-end tes
 - Keep all fetch/ingest runs on the same `--zip-since`.
 - The sandbox where this was built could not reach NYC Open Data; the fetch code was tested against a mock API only.
 - No docx output. Prefer pastable text or artifacts.
+
+## How to report back
+- End every summary with a "What you do next" section: numbered steps with exact, copy-pasteable commands
+  (one command per fenced bash block), written for the owner's Mac (project at ~/Documents/ems_heat, venv in .venv,
+  `export SSL_CERT_FILE="$(python -m certifi)"` before network calls). Say what output to expect or paste back.

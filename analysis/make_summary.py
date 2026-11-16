@@ -2,8 +2,9 @@
 Build the one-page summary (docs/ems_heat_watch_summary.html + .pdf) from results/v2.
 Every number is read from the result files, not typed in.
 
-  python analysis/make_summary.py
+  python analysis/make_summary.py --author "Your Name"
 """
+import argparse
 import base64
 import io
 import json
@@ -74,6 +75,10 @@ def table():
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--author", default="")
+    a = ap.parse_args()
+    by = f"{a.author} · " if a.author else ""
     er = pd.read_csv(RES / "exposure_response.csv").set_index("outcome")
     log = json.loads((RES / "run_log.json").read_text())
     heat = er.loc["HEAT"]
@@ -96,7 +101,7 @@ img {{ width:100%; }} .note {{ color:{MUTED}; font-size:7.4pt; }}
 </style></head><body>
 <h1>EMS Heat Watch</h1>
 <p class="sub">Heat-health surveillance from ambulance dispatch data: proof of concept on New York City EMS data, 2013–2026 ·
-code and results: github.com/samielsabri/ems-heat-watch · {pd.Timestamp.today():%B %Y}</p>
+{by}code and results: github.com/samielsabri/ems-heat-watch · {pd.Timestamp.today():%B %Y}</p>
 <div class="cols"><div>
 <h2>Problem</h2>
 <p>Hospital and mortality data, the core measures of heat-health impact, arrive months after a heat event.
@@ -156,8 +161,15 @@ Farrington port not yet cross-checked against R <i>surveillance</i>.</li>
     out.write_text(html)
     import subprocess
     import shutil, glob
-    cands = glob.glob("/opt/pw-browsers/chromium-*/chrome-linux64/chrome") + [shutil.which("chromium") or "", shutil.which("google-chrome") or ""]
-    chrome = next(c for c in cands if c)
+    mac = ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+           "/Applications/Chromium.app/Contents/MacOS/Chromium",
+           "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"]
+    cands = (glob.glob("/opt/pw-browsers/chromium-*/chrome-linux64/chrome") + [c for c in mac if Path(c).exists()]
+             + [shutil.which(n) or "" for n in ("chromium", "google-chrome", "chrome")])
+    chrome = next((c for c in cands if c), None)
+    if chrome is None:
+        print("No Chrome/Chromium found: open", out, "in a browser and print to PDF (Letter, no headers).")
+        return
     subprocess.run([chrome, "--headless", "--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
                     f"--print-to-pdf={DOCS / 'ems_heat_watch_summary.pdf'}", out.resolve().as_uri()],
                    check=True, capture_output=True)
