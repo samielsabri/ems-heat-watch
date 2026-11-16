@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+# downloaded / derived data (large, regenerable)
+raw/
+store/
+report/
+out/
+data/synthetic/
+.DS_Store
