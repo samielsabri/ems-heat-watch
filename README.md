@@ -74,9 +74,12 @@ Verified 2026-11-16 on toronto.ca (sources and dates in `docs/toronto_heat_sourc
 - Environment and Climate Change Canada (ECCC) issues Heat Warnings for Toronto. TPH stopped issuing its own in 2019.
 - A Heat Warning needs a forecast of at least 2 consecutive days with Tmax ≥ 31 °C and Tmin ≥ 20 °C, or at least 2 days with humidex ≥ 40.
 - The Heat Relief Network (500+ cool spaces) runs all summer. 24-hour cool spaces and Streets to Homes outreach are part of the response.
-- ECCC grades heat alerts by expected impact: Moderate, High, Extreme. Each level's health line runs from "increased" to "higher" to "extreme" risk of illness or death (ECCC weather impact guides). An "Extreme heat warning" product exists, but its meteorological criteria were **not** verified. Check them before citing them.
+- ECCC aims to issue Heat Warnings 18-24 hours ahead, for events of 2 or more days. A one-day heat event does not usually get a warning.
+- Severity is conveyed by impact level, not a separate warning product: Moderate, High, Extreme. Each level's health line runs from "increased" to "higher" to "extreme" risk of illness or death (ECCC weather impact guides). There is no separate "Extreme Heat Warning".
 
 EMS excess calls measure the health line of those impact levels directly, so the EMS signal can confirm or challenge the impact level assigned to an event.
+
+EMS also covers what warnings deliberately skip. One-day heat events usually get no warning, yet in NYC the HEAT-call alarm fired on 49% of isolated hot days (Tmax ≥ 32.2 °C outside a heat wave) in 2016-2024, and on 69% in 2025-26 (`hot_isolated_alarm_rate` in `results/v2/backtest_summary.csv`).
 
 An EMS alarm is not a weather alert. It is evidence about health impact. The suggested mapping:
 
@@ -129,6 +132,11 @@ python -m emsheat verify --store store
 python analysis/run_v2.py --store store --weather-csv data/central_park_tmax.csv --out results/v2
 python -m emsheat analyze --store store --out report --weather-csv data/central_park_tmax.csv \
   --heat-regex "^HEAT$" --train-end 2024-12-31 --eval-start 2025-01-01
+# same, plus an Open-Meteo 7-day outlook appended to the station history (same exposure as the back-test):
+python -m emsheat analyze --store store --out report_live --weather-csv data/central_park_tmax.csv --forecast \
+  --heat-regex "^HEAT$" --train-end 2024-12-31 --eval-start 2025-01-01
+# note: --weather open-meteo uses ERA5 grid temperatures for the whole history; they run hotter than the
+# Central Park station, find more heat waves, and do not reproduce the numbers above.
 # synthetic end-to-end test
 python synth/make_synthetic.py
 python -m emsheat ingest --store out/store data/synthetic/ems_2021_2024.json.gz --zip-since 2021-01-01

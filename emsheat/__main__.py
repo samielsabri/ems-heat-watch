@@ -23,7 +23,7 @@ from .ingest import ingest, load_state
 
 
 def _weather(a, start):
-    wx = W.get(a.weather, a.weather_csv, start=start)
+    wx = W.get(a.weather, a.weather_csv, start=start, forecast=getattr(a, "forecast", False))
     print(f"Weather: {len(wx)} days {wx.index.min().date()} to {wx.index.max().date()} "
           f"({int(wx['forecast'].sum())} forecast)")
     return wx
@@ -93,6 +93,8 @@ def main(argv=None):
         sp.add_argument("--out", default="report")
         sp.add_argument("--weather", default="open-meteo", choices=["open-meteo", "noaa"])
         sp.add_argument("--weather-csv")
+        sp.add_argument("--forecast", action="store_true",
+                        help="append Open-Meteo 7-day forecast to a noaa/CSV history (same exposure as the back-test)")
         sp.add_argument("--exposure", default="tmax")
         sp.add_argument("--train-end")
         sp.add_argument("--eval-start")

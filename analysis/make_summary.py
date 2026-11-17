@@ -84,6 +84,9 @@ def main():
     heat = er.loc["HEAT"]
     syn = er.loc["Heat syndrome (pre-specified)"]
     qa = pd.read_csv(RES / "qa_by_year.csv", index_col=0)
+    bs = pd.read_csv(RES / "backtest_summary.csv")
+    hot_dev = float(bs[(bs.outcome == "HEAT") & (bs.method == "Heat model vs normal Tmax")
+                       & bs.period.str.startswith("Dev")]["hot_isolated_alarm_rate"].iloc[0])
     n_calls = int(qa["all_calls"].sum())
     html = f"""<!doctype html><html><head><meta charset="utf-8"><title>EMS Heat Watch</title>
 <style>
@@ -143,11 +146,10 @@ impact, not earlier warning than a forecast.</li>
 <img src="data:image/svg+xml;base64,{fig()}">
 <div class="cols"><div>
 <h2>Fit with Toronto's heat response</h2>
-<p>Environment and Climate Change Canada issues Toronto Heat Warnings (≥2 days Tmax ≥31 °C with Tmin ≥20 °C, or humidex ≥40); TPH
-runs the Heat Relief Strategy. ECCC grades heat alerts by expected impact (Moderate, High, Extreme: "increased" to "extreme risk of illness
-or death"); EMS excess calls measure that health impact directly. An EMS alarm adds the health side: during a warning it confirms and sizes impact the same day (supporting
-extended cool-space hours and targeted outreach); an alarm <i>without</i> a warning flags impact the forecast criteria missed;
-after the event, excess calls test whether the impact level issued matched the harm observed.</p>
+<p>ECCC issues Toronto Heat Warnings (≥2 days Tmax ≥31 °C with Tmin ≥20 °C, or humidex ≥40), graded by expected impact (Moderate/High/Extreme,
+"increased" to "extreme risk of illness or death"); TPH runs the Heat Relief Strategy. EMS excess calls measure that health impact directly:
+during a warning they confirm and size it the same day; after the event they test whether the impact level matched the harm.
+One-day heat events usually get no warning, yet the HEAT alarm fired on {100*hot_dev:.0f}% of isolated hot days (2016–24).</p>
 </div><div>
 <h2>Limitations</h2>
 <ul><li>Dispatch codes are caller/crew impressions, not diagnoses; NYC re-labelled codes during the period (families merged).</li>

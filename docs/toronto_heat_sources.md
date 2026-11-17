@@ -14,12 +14,21 @@ ECCC impact levels (verified 2026-11-17 by the owner from canada.ca "Weather imp
   significant heat and/or Humidex values"). Health line per level: "Increased risk of illness or death" (Moderate),
   "Higher risk of illness or death" (High), "Extreme risk of illness or death" (Extreme). Other listed impacts: power
   outages, water shortages, workforce impacts, outdoor event disruption, damage to infrastructure.
-- An "Extreme heat warning" product exists (linked from that page:
-  https://www.canada.ca/en/services/environment/weather/severeweather/extreme-heat-warning.html). Its meteorological
-  criteria have NOT been read.
 - URL: https://www.canada.ca/en/services/environment/weather/severeweather/weather-alerts/weather-impact-guides.html
 
-NOT verified: the meteorological criteria for any tier above Heat Warning (e.g. "Extreme Heat Warning" /
+ECCC "Extreme heat events and heat warnings" (canada.ca, modified 2026-05-13; page saved and read 2026-11-17):
+- "We call hot weather an extreme heat event when daily temperatures reach heat warning thresholds on 2 or more days in a
+  row with no relief overnight, sometimes with high humidity."
+- "We aim to issue heat warnings 18-24 hours in advance of an extreme heat event."
+- "Heat warnings can be issued at different temperature values depending on where you live."
+- "If we expect a heat event to last only one day, we do not usually send out a heat warning."
+- Alerts "are based on expected impacts" (links to the impact guides above). Humidex is included only where humidity is high.
+- ECCC works with Health Canada and P/T health authorities on warning criteria and supports Heat Alert Response Systems (HARS).
+- There is NO separate "Extreme Heat Warning" product on this page: the product is the Heat Warning, and severity is
+  conveyed by the colour-coded impact level (Moderate/High/Extreme). An earlier note in this file wrongly implied otherwise.
+- URL: https://www.canada.ca/en/services/environment/weather/severeweather/extreme-heat-warning.html
+
+Still NOT read: the ECCC regional criteria table (criteria-alerts.html#heat). Toronto's numbers above come from toronto.ca (e.g. "Extreme Heat Warning" /
 "Extended Heat Warning"). The ECCC alert-criteria page (canada.ca) refused connections from the build
 environment, and the 2025.EX28.4 council report (secure.toronto.ca) was not reachable. Check both before
 quoting a second tier.

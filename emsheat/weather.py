@@ -70,9 +70,27 @@ def from_csv(path):
     return df
 
 
-def get(source="open-meteo", path=None, start="2015-01-01", end=None):
+def add_forecast(wx, lat=CENTRAL_PARK[0], lon=CENTRAL_PARK[1]):
+    """Append Open-Meteo forecast days (today onward) to an observed series, keeping the observed
+    history untouched. Use this so history and forecast share the station exposure definition."""
+    q = dict(latitude=lat, longitude=lon, daily=DAILY, timezone="America/New_York", forecast_days=8)
+    fc = _om_frame(_json("https://api.open-meteo.com/v1/forecast?" + urllib.parse.urlencode(q)))
+    today = pd.Timestamp.today().normalize()
+    fc = fc[fc.index >= today].copy()
+    fc["forecast"] = True
+    keep = [c for c in wx.columns if c in fc.columns]
+    out = pd.concat([wx, fc.loc[~fc.index.isin(wx.index), keep]]).sort_index()
+    out["forecast"] = out["forecast"].fillna(False).astype(bool)
+    return out
+
+
+def get(source="open-meteo", path=None, start="2015-01-01", end=None, forecast=False):
+    """source: open-meteo (ERA5 grid history + forecast), noaa (Central Park station), or a CSV.
+    forecast=True appends Open-Meteo forecast days to a noaa or CSV history."""
     if path:
-        return from_csv(path)
-    if source == "noaa":
-        return noaa_central_park(start, end)
-    return open_meteo(start, end)
+        wx = from_csv(path)
+    elif source == "noaa":
+        wx = noaa_central_park(start, end)
+    else:
+        return open_meteo(start, end)
+    return add_forecast(wx) if forecast else wx
