@@ -1,5 +1,5 @@
 # Figure and one-page summary, built from output/.
-#   docs/figure.svg, docs/summary.html, and docs/summary.pdf if Chrome or Chromium is installed
+#   docs/figure.png, docs/summary.html, and docs/summary.pdf if a Chromium-based browser is installed
 # Usage: Rscript R/03_summary.R ["Name"]   (or Source it in RStudio)
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -12,7 +12,9 @@ heat <- read.csv("data/heat_calls.csv", colClasses = c("Date", "integer"))
 
 # --- figure: heat calls in the two held-out summers ---
 ink <- "#0b0b0b"; blue <- "#2a78d6"; red <- "#e34948"; wave <- "#fbe6d6"; grey <- "#6b6a66"
-svg("docs/figure.svg", width = 7.5, height = 2.1, family = "Helvetica")
+# quartz on a Mac, cairo elsewhere: neither needs XQuartz on macOS
+png("docs/figure.png", width = 7.5, height = 2.1, units = "in", res = 300,
+    type = if (capabilities("aqua")) "quartz" else "cairo")
 par(mfrow = c(1, 2), mar = c(2.2, 3.2, 1.6, 0.6), mgp = c(2, 0.5, 0), tcl = -0.2, cex.axis = 0.75,
     col.axis = grey, fg = "#c9c8c3")
 ymax <- max(ind$heat_calls[ind$date >= as.Date("2025-05-15")], na.rm = TRUE)
@@ -53,7 +55,8 @@ last <- max(heat$date)
 lag <- as.numeric(Sys.Date() - last)
 per_year <- 10 * round(0.1 * mean(tapply(heat$heat_calls, format(heat$date, "%Y"), sum)[as.character(2016:2024)]))
 by <- if (nzchar(author)) paste0(author, " · ") else ""
-fig <- paste(readLines("docs/figure.svg"), collapse = "\n")
+fig <- paste0('<img src="data:image/png;base64,',
+              jsonlite::base64_enc(readBin("docs/figure.png", "raw", file.size("docs/figure.png"))), '">')
 
 html <- sprintf('<!doctype html><html><head><meta charset="utf-8"><title>EMS Heat Watch</title><style>
 @page { size: Letter; margin: 0.4in 0.55in; }
@@ -65,7 +68,7 @@ h1 { font-size: 18pt; margin: 0 0 2px; } h2 { font-size: 10.5pt; margin: 9px 0 3
 .tile span, .note { color: #52514e; font-size: 8.6pt; }
 table { border-collapse: collapse; width: 100%%; font-size: 9.2pt; } th, td { padding: 3px 6px; border-bottom: 1px solid #eee; text-align: right; }
 th:first-child, td:first-child { text-align: left; } th { color: #52514e; font-weight: 600; }
-svg { width: 100%%; height: auto; }
+img { width: 100%%; height: auto; }
 </style></head><body>
 <h1>EMS Heat Watch</h1>
 <p class="sub">Can ambulance calls show the health impact of heat within days? A proof of concept on public New York City data. %sgithub.com/samielsabri/ems-heat-watch</p>
@@ -111,9 +114,12 @@ the health side: is the heat causing harm, and how much? It does not predict hea
   round(100 * get("development", "indicator", "hot_single_days_flagged")))
 writeLines(html, "docs/summary.html")
 
-chrome <- Filter(file.exists, c("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-                                Sys.glob("/opt/pw-browsers/chromium-*/chrome-linux64/chrome"),
-                                Sys.which(c("chromium", "google-chrome"))))
+browsers <- c("Google Chrome.app/Contents/MacOS/Google Chrome", "Chromium.app/Contents/MacOS/Chromium",
+              "Microsoft Edge.app/Contents/MacOS/Microsoft Edge", "Brave Browser.app/Contents/MacOS/Brave Browser")
+chrome <- Filter(function(f) nzchar(f) && file.exists(f),
+                 c(file.path("/Applications", browsers), file.path(path.expand("~/Applications"), browsers),
+                   Sys.glob("/opt/pw-browsers/chromium-*/chrome-linux64/chrome"),
+                   Sys.which(c("chromium", "google-chrome", "microsoft-edge"))))
 if (length(chrome)) {
   system2(chrome[1], c("--headless", "--no-sandbox", "--disable-gpu", "--no-pdf-header-footer",
                        paste0("--print-to-pdf=", normalizePath("docs"), "/summary.pdf"),
