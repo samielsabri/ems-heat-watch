@@ -59,7 +59,7 @@ def fig_operational(ctx, name, days=60):
         ax.axvline(ctx["last"] + pd.Timedelta(hours=12), color=MUTED, lw=0.8)
         ax.text(ctx["last"] + pd.Timedelta(hours=18), ax.get_ylim()[1] * 0.97, "forecast", color=MUTED,
                 va="top", fontsize=8.5)
-    ax.set_title(f"{name}: last {days} days and 7-day outlook")
+    ax.set_title(f"{name}: last {days} days" + (" and 7-day outlook" if fc is not None and len(fc) else ""))
     ax.set_ylabel("calls per day")
     ax.legend(loc="upper left", fontsize=8, ncol=2)
     tt = temp[lo:hi]
@@ -201,7 +201,9 @@ def write(ctx, out):
         (f"{prim}, latest day", f"{int(today['obs'])}", f"expected {today.get('mu_norm', today['mu_base']):.1f} at normal Tmax (alarm > {today.get('u_norm', today['u_base']):.0f})",
          bool(today["alarm"])),
         ("Alarm days, last 7", f"{recent_alarms}", "observed above the normal-temperature threshold", recent_alarms > 0),
-        ("Forecast heat calls, next 7 days", f"{fc_heat:.0f}", f"peak forecast Tmax {fc_peak:.1f} °C", fc_heat >= 5),
+        (("Forecast excess heat calls, next 7 days", f"{fc_heat:+.0f}", f"vs normal Tmax; peak forecast Tmax {fc_peak:.1f} °C", fc_heat >= 5)
+         if fc is not None and len(fc) else
+         ("7-day outlook", "n/a", "no forecast weather in this run (use --weather open-meteo)", False)),
     ]
     kpis = "".join(f"<div class='kpi{' warn' if w else ''}'><span>{html.escape(a)}</span><b>{html.escape(b)}</b>"
                    f"<span>{html.escape(c)}</span></div>" for a, b, c, w in kp)
@@ -219,14 +221,15 @@ def write(ctx, out):
     btp, bts_sum = pd.DataFrame(), pd.DataFrame()
     if len(bt):
         btp = bt[bt["outcome"] == prim][["start", "days", "peak_tmax", "alarm_days", "days_to_first_alarm", "obs",
-                                         "expected_seasonal", "excess_obs", "heat_expected"]].copy()
+                                         "expected_normal", "excess_obs", "heat_expected"]].copy()
         btp["days_to_first_alarm"] = btp["days_to_first_alarm"].astype(object).where(btp["days_to_first_alarm"].notna(), "none")
         btp.columns = ["onset", "days", "peak Tmax °C", "alarm days", "first alarm (day)", "observed",
-                       "seasonal expected", "observed excess", "model-predicted heat calls"]
+                       "expected at normal Tmax", "observed excess", "model-predicted excess"]
         rows = []
         for k, g in bt.groupby("outcome", sort=False):
             hit = g["days_to_first_alarm"].notna()
             rows.append({"outcome": k, "heat waves alarmed": f"{int(hit.sum())}/{len(g)}",
+                         "waves with excess > 0": f"{int((g['excess_obs'] > 0).sum())}/{len(g)}",
                          "median first alarm (day)": float(g.loc[hit, "days_to_first_alarm"].median()) if hit.any() else None,
                          "observed excess": g["excess_obs"].sum(), "model-predicted": g["heat_expected"].sum()})
         bts_sum = pd.DataFrame(rows)
@@ -235,17 +238,19 @@ def write(ctx, out):
     if fc is not None and len(fc):
         fct = fc.reset_index().rename(columns={"index": "date"})
         fct["date"] = fct["date"].dt.strftime("%a %d %b")
-        fct = fct[["date", "temp", "mu_base", "mu_full", "heat_expected"]]
+        fct = fct[["date", "temp", "mu_norm", "mu_full", "heat_expected"]].rename(
+            columns={"temp": "Tmax", "mu_norm": "expected at normal Tmax", "mu_full": "expected", "heat_expected": "excess"})
 
     zblock = ""
-    if ctx.get("zip_pooled") is not None:
+    if ctx.get("zip_pooled") is not None and len(ctx["zip_pooled"]):
         key = f"{len(ctx['zres'])} evaluated heat waves (pooled)"
         zr = ctx["zip_pooled"]
         zt = zr.head(12).reset_index()
         zblock = (f"<h2>Where: zip codes across {key}</h2>"
-                  f"<p class='sub'>Indirectly standardised ratios for heat-coded and heat-sensitive calls pooled ({html.escape(', '.join(ctx['zip_types']))}), since heat-coded calls alone are too sparse per zip. Expected counts use each zip's "
-                  f"share on ordinary summer days (that year and the year before), scaled to the citywide seasonal expectation. "
-                  f"<code>relative</code> above 1 means the zip was hit harder than the city as a whole.</p>"
+                  f"<p class='sub'>Exploratory, and underpowered with {len(ctx['zres'])} heat waves. Indirectly standardised ratios for heat-coded calls plus the pre-specified heat syndrome "
+                  f"({html.escape(', '.join(ctx['zip_types']))}), since heat-coded calls alone are too sparse per zip. Expected counts use each zip's "
+                  f"share on ordinary summer days (Jun–Sep of that year and the year before, Tmax &lt; 29.4 °C, outside the wave), scaled to the citywide expectation. "
+                  f"<code>relative</code> above 1 means the zip was hit harder than the city as a whole; check the confidence interval before reading anything into it.</p>"
                   f"<div class='grid2'><img src='data:image/png;base64,{fig_zips(zr, 'Top zips, all evaluated heat waves')}'>"
                   + _table(zt[["zipcode", "obs", "expected", "sir", "sir_lo", "sir_hi", "relative"]],
                            {"expected": "{:.1f}", "sir": "{:.2f}", "sir_lo": "{:.2f}", "sir_hi": "{:.2f}",
@@ -254,6 +259,7 @@ def write(ctx, out):
     scr = ctx["screen"].head(15)[["call_type", "mean_daily", "rr", "rr_lo", "rr_hi", "q"]].copy()
     for c in ("rr", "rr_lo", "rr_hi"):
         scr[c] = (scr[c] - 1) * 100
+    scr["flagged"] = np.where((ctx["screen"].head(15)["q"] < 0.05) & (ctx["screen"].head(15)["rr"] >= 1.02), "yes", "")
     scr = scr.rename(columns={"rr": "%/°C", "rr_lo": "lo", "rr_hi": "hi"})
 
     body = f"""
@@ -266,23 +272,26 @@ models trained to {ctx['train_end'].date()}; prospective evaluation from {ctx['e
 Primary outcome: <b>{html.escape(prim)}</b>{' (' + ', '.join(rp['types']) + ')' if rp['types'] and len(rp['types']) < 12 else ''}.</p>
 <div class="kpis">{kpis}</div>
 <img src="data:image/png;base64,{fig_operational(ctx, prim)}">
-<p class="note">Blue: what this date normally sees (trend, season, weekday, holidays; no heat). Orange dashed: what the model expects given
-observed or forecast temperature. Circles: alarm days, where observed calls exceed the {100 * (1 - ctx['alpha']):.1f}% upper limit of
-the seasonal expectation. Shading: heat waves (3+ days ≥ 32.2 °C).</p>
+<p class="note">Blue line: calls expected for this date at its normal Tmax (trend, season, weekday, holidays, normal temperature).
+Shaded band: from that expectation up to the {100 * (1 - ctx['alpha']):.1f}% alarm limit. Orange dashed: calls expected given the observed
+temperature. Circles: alarm days (observed above the band). Lower panel: Tmax, with the heat threshold T0. {'Dotted segment: forecast Tmax.' if fresh.get('has_forecast') else 'No forecast weather in this run, so no outlook is shown.'}</p>
 
-<h2>Why this beats lagged hospital data</h2>
+<h2>Timeliness compared with a six-month lag</h2>
 <p>As of {fresh['asof']}, this pipeline sees data to {fresh['last_complete']} ({fresh['lag_days']} day lag). It covers
 {fresh['visible_now']} of {len(ctx['events'])} heat waves in the record. With a six-month lag, only {fresh['visible_with_6mo_lag']} would be visible,
 and none from the current season.</p>
 
 <h2>Heat waves in the evaluation period</h2>
 <p class="sub">Every heat wave since evaluation began, scored prospectively: each week's model saw only earlier data.</p>
-{_table(btp, {"peak Tmax °C": "{:.1f}", "observed": "{:.0f}", "seasonal expected": "{:.0f}", "observed excess": "{:+.0f}", "model-predicted heat calls": "{:.0f}"}) if len(btp) else "<p>No heat waves in the evaluation period.</p>"}
-<p class="note">{html.escape(prim)}. First alarm counts from heat wave onset (0 = alarm on day one). Observed excess is observed minus
-seasonal expectation over the wave plus three days; model-predicted heat calls is what the temperature model expected for the same window.</p>
+{_table(btp, {"peak Tmax °C": "{:.1f}", "observed": "{:.0f}", "expected at normal Tmax": "{:.0f}", "observed excess": "{:+.0f}", "model-predicted excess": "{:+.0f}"}) if len(btp) else "<p>No heat waves in the evaluation period.</p>"}
+<p class="note">{html.escape(prim)}. First alarm counts from heat wave onset (0 = alarm on day one). Window: the wave plus three days.
+Observed excess = observed minus expected at normal Tmax; model-predicted excess = what the temperature model expected minus the same normal-Tmax
+expectation. Close agreement means the model sizes the impact correctly.</p>
 <h2>All outcomes</h2>
-{_table(bts_sum, {"median first alarm (day)": "{:.0f}", "observed excess": "{:+.0f}", "model-predicted": "{:.0f}"}) if len(bts_sum) else ""}
-<p class="note">Broader outcomes dilute the heat signal: all-call volume rises in every heat wave but crosses the alarm threshold less often.</p>
+{_table(bts_sum, {"median first alarm (day)": "{:.0f}", "observed excess": "{:+.0f}", "model-predicted": "{:+.0f}"}) if len(bts_sum) else ""}
+<p class="note">Excess is measured against the count expected at normal Tmax over each wave plus three days. Broader outcomes carry a
+small heat effect relative to their day-to-day variation, so their excess is inconsistent between waves and rarely crosses the alarm limit:
+use them to size impact after the fact, not to alarm.</p>
 
 <img src="data:image/png;base64,{fig_timeline(ctx, prim)}">
 
@@ -299,7 +308,7 @@ model with a natural spline of time, day of week and holidays. Fitted on the tra
 screened on the training period; listed as heat-sensitive if FDR q &lt; 0.05 and ≥ +2%/°C. The surveillance syndrome is NOT taken
 from this screen: it is pre-specified (emsheat/syndromes.py). Summer-behavioural types (injury, violence, drowning) can pass the screen.</p>
 {zblock}
-{'<h2>Next 7 days</h2>' + _table(fct, {"temp": "{:.1f}", "mu_base": "{:.1f}", "mu_full": "{:.1f}", "heat_expected": "{:+.1f}"}) if fct is not None else ''}
+{'<h2>Next 7 days</h2>' + _table(fct, {"Tmax": "{:.1f}", "expected at normal Tmax": "{:.1f}", "expected": "{:.1f}", "excess": "{:+.1f}"}) if fct is not None else ''}
 
 <h2>Method and limits</h2>
 <ul>
@@ -322,7 +331,10 @@ from this screen: it is pre-specified (emsheat/syndromes.py). Summer-behavioural
         md.append("Heat waves (primary outcome):")
         for _, b in btp.iterrows():
             md.append(f"- {b['onset']} ({b['days']} d, peak {b['peak Tmax °C']:.1f} °C): first alarm day "
-                      f"{b['first alarm (day)']}, excess {b['observed excess']:+.0f} calls vs {b['model-predicted heat calls']:.0f} predicted")
-    md.append(f"Next 7 days: {fc_heat:.0f} heat-attributable calls expected (peak {fc_peak:.1f} °C)")
+                      f"{b['first alarm (day)']}, excess {b['observed excess']:+.0f} calls vs {b['model-predicted excess']:+.0f} predicted (vs normal Tmax)")
+    if fc is not None and len(fc):
+        md.append(f"Next 7 days: {fc_heat:+.0f} calls vs normal Tmax expected (peak forecast {fc_peak:.1f} °C)")
+    else:
+        md.append("Next 7 days: no forecast weather in this run")
     (out / "summary.md").write_text("\n".join(md) + "\n")
     return path

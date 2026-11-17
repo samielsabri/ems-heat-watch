@@ -33,15 +33,16 @@ for name, types in outcomes.items():
     if not f.exists() or not types:
         continue
     s = pd.read_csv(f, index_col=0, parse_dates=True)
+    HCOL = "heat_attrib_T0" if "heat_attrib_T0" in s else "heat_expected"  # total attributable to Tmax above T0
     t = te[te["call_type"].isin(types)].groupby("date")[["lam_full", "lam_noheat"]].sum().reindex(s.index)
     true_heat = t["lam_full"] - t["lam_noheat"]
     rr = t["lam_full"] / t["lam_noheat"]
-    r = np.corrcoef(true_heat, s["heat_expected"])[0, 1]
+    r = np.corrcoef(true_heat, s[HCOL])[0, 1]
     hot, cool = rr > 1.25, rr < 1.02
     sens = s.loc[hot, "alarm"].mean() if hot.any() else np.nan
     far = s.loc[cool, "alarm"].mean()
-    print(f"   {name:26s} {true_heat.sum():10.0f} {s['heat_expected'].sum():8.0f} "
-          f"{s['heat_expected'].sum() / true_heat.sum():6.2f} {r:8.3f} | {sens:.2f} ({hot.sum()} days) / {far:.4f} ({cool.sum()} days)")
+    print(f"   {name:26s} {true_heat.sum():10.0f} {s[HCOL].sum():8.0f} "
+          f"{s[HCOL].sum() / true_heat.sum():6.2f} {r:8.3f} | {sens:.2f} ({hot.sum()} days) / {far:.4f} ({cool.sum()} days)")
 
 print("\n3. Zip ratios: are the doubled-sensitivity zips at the top?")
 vuln = set(truth["vulnerable_zips"])

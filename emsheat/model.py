@@ -247,22 +247,29 @@ def surveil(y, temp, start, end, T0, train_years=3, refit_every=7, alpha=0.005, 
         s["alarm_norm"] = s["obs"] > s["u_norm"]
     s["alarm"] = s["alarm_norm"] if "alarm_norm" in s else s["alarm_excess"]
     s["alarm_unexplained"] = s["obs"] > s["u_full"]
-    s["heat_expected"] = s["mu_full"] - s["mu_base"]
-    s["excess_obs"] = s["obs"] - s["mu_base"]
+    ref = s["mu_norm"] if "mu_norm" in s else s["mu_base"]
+    s["heat_expected"] = s["mu_full"] - ref          # model-predicted excess over normal Tmax
+    s["excess_obs"] = s["obs"] - ref                 # observed excess over normal Tmax
+    s["heat_attrib_T0"] = s["mu_full"] - s["mu_base"]  # all calls attributable to Tmax above T0
     s["temp"] = temp.reindex(s.index)
     return s
 
 
-def forecast(y, temp, T0, train_years=3, exclude=None):
-    """Expected heat-attributable calls for forecast days (temp rows flagged forecast)."""
+def forecast(y, temp, T0, train_years=3, exclude=None, days=None, temp_ref=None):
+    """Expected calls on forecast days. `days`: the dates that are genuine weather forecasts
+    (wx['forecast'] == True). Observed weather after the last EMS day is NOT a forecast and is
+    ignored. heat_expected = expected calls minus expected at normal Tmax (if temp_ref given)."""
     last = y.index.max()
-    fut = temp.index[temp.index > last]
+    fut = pd.DatetimeIndex(days if days is not None else [])
+    fut = fut[fut > last]
     if len(fut) == 0:
         return None
     hist = y[last - pd.DateOffset(years=train_years): last]
     m = HeatModel("prosp", T0).fit(hist, temp, exclude)
     p = m.predict(fut, temp)
-    p["heat_expected"] = p["mu_full"] - p["mu_base"]
+    ref = m.predict(fut, temp_ref)["mu_full"] if temp_ref is not None else p["mu_base"]
+    p["mu_norm"] = ref
+    p["heat_expected"] = p["mu_full"] - ref
     p["temp"] = temp.reindex(fut)
     return p
 
@@ -294,7 +301,8 @@ def backtest_events(surv, events, after=3):
             alarm_days=int(win[acol].sum()),
             first_alarm=first.date() if first is not None else None,
             days_to_first_alarm=(first - e["start"]).days if first is not None else None,
-            obs=float(win["obs"].sum()), expected_seasonal=float(win["mu_base"].sum()),
+            obs=float(win["obs"].sum()),
+            expected_normal=float(win["mu_norm"].sum() if "mu_norm" in win else win["mu_base"].sum()),
             excess_obs=float(win["excess_obs"].sum()), heat_expected=float(win["heat_expected"].sum()),
             unexplained_days=int(win["alarm_unexplained"].sum()),
         ))
@@ -310,11 +318,11 @@ def poisson_ci(o, alpha=0.05):
     return lo, hi
 
 
-def zip_ratios(zip_daily, types, surv, event, temp, T0, after=3, min_ref=20):
+def zip_ratios(zip_daily, types, surv, event, temp, T0=None, after=3, min_ref=20, ref_max=29.4):
     """
     Indirectly standardised ratio per zip for one heat wave.
       share_z   = zip's share of the outcome on reference days (Jun-Sep of the event year
-                  and the year before, Tmax < T0, outside the heat wave window)
+                  and the year before, Tmax < ref_max (29.4 C = 85 F), outside the heat wave window)
       E_z       = share_z * sum(mu_base over window)     -> SIR_z = O_z / E_z
       relative  = SIR_z / citywide SIR   (> 1: zip hit harder than the city as a whole)
     """
@@ -322,13 +330,13 @@ def zip_ratios(zip_daily, types, surv, event, temp, T0, after=3, min_ref=20):
     s, e = pd.Timestamp(event["start"]), pd.Timestamp(event["end"]) + pd.Timedelta(days=after)
     yr = s.year
     ref_days = z.index[z.index.year.isin([yr - 1, yr]) & z.index.month.isin([6, 7, 8, 9])]
-    ref_days = ref_days[(temp.reindex(ref_days) < T0).values]
+    ref_days = ref_days[(temp.reindex(ref_days) < ref_max).values]
     ref_days = ref_days[(ref_days < s - pd.Timedelta(days=3)) | (ref_days > e)]
     ref = z.loc[ref_days].sum()
     ref = ref[ref.index != "UNKNOWN"]
     share = ref / ref.sum()
     win = z.loc[s:e].sum().reindex(share.index, fill_value=0)
-    E_city = surv.loc[s:e, "mu_base"].sum()
+    E_city = surv.loc[s:e, "mu_norm" if "mu_norm" in surv else "mu_base"].sum()
     O_city = surv.loc[s:e, "obs"].sum()
     E = share * E_city
     out = pd.DataFrame({"obs": win, "expected": E, "ref_calls": ref})
