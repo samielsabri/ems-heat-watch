@@ -6,6 +6,9 @@ Command line:
   python -m emsheat ingest --store store FILE_OR_DIR   # reduce a JSON/CSV export into the store
   python -m emsheat analyze --store store --out report [--weather-csv f | --weather noaa]
   python -m emsheat update --store store --out report  # fetch + ingest + analyze (cron this daily)
+  python -m emsheat fetch-agg --store store --since 2013-01-01 --zip-since 2022-01-01
+                                                       # server-side daily aggregates, no row download
+  python -m emsheat verify --store store               # compare store daily totals with the portal
 """
 import argparse
 import shutil
@@ -20,7 +23,7 @@ from .ingest import ingest, load_state
 
 
 def _weather(a, start):
-    wx = W.get(a.weather, a.weather_csv, start=start)
+    wx = W.get(a.weather, a.weather_csv, start=start, forecast=getattr(a, "forecast", False))
     print(f"Weather: {len(wx)} days {wx.index.min().date()} to {wx.index.max().date()} "
           f"({int(wx['forecast'].sum())} forecast)")
     return wx
@@ -35,6 +38,42 @@ def _analyze(a):
               a.train_years, a.alpha)
     path = write(ctx, a.out)
     print(f"Report: {path}")
+
+
+def _fetch_agg(a):
+    import json
+    from .ingest import TYPE_KEYS, ZIP_KEYS
+    t, z, wm = F.fetch_aggregates(a.cache, a.since, a.until, a.zip_since)
+    store = Path(a.store)
+    store.mkdir(parents=True, exist_ok=True)
+    t.sort_values(TYPE_KEYS).to_csv(store / "type_daily.csv.gz", index=False, compression="gzip")
+    if z is not None:
+        z.sort_values(ZIP_KEYS).to_csv(store / "zip_daily.csv.gz", index=False, compression="gzip")
+    n = int(t.loc[t["field"] == "final", "n"].sum())
+    state = dict(watermark=str(wm), rows_ingested=n, source="socrata-aggregate",
+                 since=a.since, zip_since=a.zip_since,
+                 fetched_at=pd.Timestamp.now().isoformat(timespec="seconds"))
+    (store / "state.json").write_text(json.dumps(state, indent=2))
+    print(f"Store written: {n:,} calls, {t['date'].min().date()} to {t['date'].max().date()}, watermark {wm}")
+
+
+def _verify(a):
+    """Per-day totals in the store vs the portal. Flags duplicated or missing rows."""
+    t = pd.read_csv(Path(a.store) / "type_daily.csv.gz", parse_dates=["date"])
+    mine = t[t["field"] == "final"].groupby("date")["n"].sum()
+    since = a.since or str(mine.index.min().date())
+    mine = mine[since:]
+    ref = F.daily_counts(since, mine.index.max() + pd.Timedelta(days=1))
+    d = pd.DataFrame({"store": mine, "portal": ref}).fillna(0).astype(int)
+    d["diff"] = d["store"] - d["portal"]
+    bad = d[d["diff"] != 0]
+    print(f"{len(d)} days {d.index.min().date()} to {d.index.max().date()}: store {d['store'].sum():,}, "
+          f"portal {d['portal'].sum():,}, diff {d['diff'].sum():+,}; {len(bad)} days differ "
+          f"({(bad['diff'] > 0).sum()} over = duplicates, {(bad['diff'] < 0).sum()} under = missing)")
+    if len(bad):
+        print(bad.head(30).to_string())
+    if a.out:
+        d.to_csv(a.out)
 
 
 def main(argv=None):
@@ -54,6 +93,8 @@ def main(argv=None):
         sp.add_argument("--out", default="report")
         sp.add_argument("--weather", default="open-meteo", choices=["open-meteo", "noaa"])
         sp.add_argument("--weather-csv")
+        sp.add_argument("--forecast", action="store_true",
+                        help="append Open-Meteo 7-day forecast to a noaa/CSV history (same exposure as the back-test)")
         sp.add_argument("--exposure", default="tmax")
         sp.add_argument("--train-end")
         sp.add_argument("--eval-start")
@@ -73,17 +114,33 @@ def main(argv=None):
         if name == "update":
             analyze_args(sp)
 
+    sp = sub.add_parser("fetch-agg"); common(sp)
+    sp.add_argument("--cache", default="raw_agg")
+    sp.add_argument("--since", required=True)
+    sp.add_argument("--until")
+    sp.add_argument("--zip-since", default=None)
+
+    sp = sub.add_parser("verify"); common(sp)
+    sp.add_argument("--since")
+    sp.add_argument("--out", default=None, help="write the per-day comparison CSV here")
+
     a = p.parse_args(argv)
     if a.cmd == "probe":
         F.probe()
     elif a.cmd == "ingest":
         ingest(a.input, a.store, a.since, a.zip_since)
+    elif a.cmd == "fetch-agg":
+        _fetch_agg(a)
+    elif a.cmd == "verify":
+        _verify(a)
     elif a.cmd == "analyze":
         _analyze(a)
     else:
         since = pd.Timestamp(a.since) if a.since else F.incremental_since(load_state(a.store), a.lookback)
         raw = Path(a.raw) / since.strftime("%Y%m%d")
-        shutil.rmtree(raw, ignore_errors=True)
+        if raw.exists() and any(raw.iterdir()):
+            # never delete downloaded pages: write this pull to a fresh, timestamped folder instead
+            raw = raw.with_name(raw.name + "_" + pd.Timestamp.now().strftime("%H%M%S"))
         print(f"Fetching rows since {since}")
         files = F.fetch_rows(raw, since)
         if files:

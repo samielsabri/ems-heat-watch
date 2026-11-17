@@ -123,7 +123,7 @@ class HeatModel:
                              "lo": np.exp((c - 1.96 * se) * x), "hi": np.exp((c + 1.96 * se) * x)})
 
 
-def choose_T0(y, temp, grid=np.arange(20, 33.5, 0.5), exclude=None):
+def choose_T0(y, temp, grid=np.arange(15, 33.5, 0.5), exclude=None):
     devs = []
     for T0 in grid:
         try:
@@ -132,6 +132,32 @@ def choose_T0(y, temp, grid=np.arange(20, 33.5, 0.5), exclude=None):
             devs.append(np.inf)
     devs = np.array(devs)
     return float(grid[int(np.argmin(devs))]), pd.Series(devs, index=grid)
+
+
+def merge_variants(wide, suffixes=("FC", "FT", "RF")):
+    """Fold suffixed code variants (e.g. SICKFC, used 2020-23) into their base code when the
+    base code exists. Returns a new wide frame."""
+    out = wide.copy()
+    for c in list(out.columns):
+        for suf in suffixes:
+            base = c[: -len(suf)]
+            if c.endswith(suf) and base in out.columns and base != c:
+                out[base] = out[base] + out[c]
+                out = out.drop(columns=c)
+                break
+    return out
+
+
+def stable_types(wide, train_end, exclude_years=(2020,), min_share=0.25):
+    """Codes used throughout training: every full training year (except exclude_years) has at
+    least min_share of the median annual count. Drops codes introduced, retired or split."""
+    w = wide[:train_end]
+    yr = w.groupby(w.index.year).sum()
+    yr = yr[(w.groupby(w.index.year).size() >= 360).values]
+    yr = yr.drop(index=[y for y in exclude_years if y in yr.index])
+    med = yr.median()
+    ok = (yr >= min_share * med).all() & (med > 0)
+    return list(ok[ok].index)
 
 
 def screen_call_types(daily_by_type, temp, T0, train_end, min_daily=1.0, exclude=None):
@@ -150,6 +176,8 @@ def screen_call_types(daily_by_type, temp, T0, train_end, min_daily=1.0, exclude
         except Exception:  # noqa: BLE001
             continue
         c, se = m.cumulative()
+        if not (np.isfinite(c) and np.isfinite(se) and se > 1e-4):
+            continue  # degenerate fit (e.g. structural zeros)
         rows.append(dict(call_type=ct, mean_daily=y.mean(), logrr=c, se=se, z=c / se if se > 0 else 0,
                          phi=m.phi))
     df = pd.DataFrame(rows)
@@ -165,15 +193,37 @@ def screen_call_types(daily_by_type, temp, T0, train_end, min_daily=1.0, exclude
     return df.sort_values("z", ascending=False).reset_index(drop=True)
 
 
-def surveil(y, temp, start, end, T0, train_years=3, refit_every=7, alpha=0.005, exclude=None):
+def normal_temp(temp, train_end, n_harm=3):
+    """Climatological normal for each calendar day: harmonic regression of temp on day of year,
+    fitted on days up to train_end only. Returns a Series over temp's index."""
+    t = temp.dropna()[:train_end]
+    def H(idx):
+        ang = 2 * np.pi * idx.dayofyear.values / 365.25
+        cols = [np.ones(len(idx))]
+        for k in range(1, n_harm + 1):
+            cols += [np.sin(k * ang), np.cos(k * ang)]
+        return np.column_stack(cols)
+    beta, *_ = np.linalg.lstsq(H(t.index), t.values, rcond=None)
+    idx = pd.date_range(temp.index.min(), temp.index.max())
+    return pd.Series(H(idx) @ beta, index=idx, name="tnorm")
+
+
+def surveil(y, temp, start, end, T0, train_years=3, refit_every=7, alpha=0.005, exclude=None,
+            temp_ref=None):
     """
     Prospective surveillance. For each block of `refit_every` days from start to end,
     fit the prosp model on the previous `train_years` years only, then score the block.
 
-    Columns: obs, mu_base (seasonal expectation, no heat), mu_full (expectation given
-    temperature), u_base / u_full (alarm thresholds), alarm_excess (obs > u_base:
-    more calls than this date normally sees), alarm_unexplained (obs > u_full: more
-    calls than even the heat model expects), heat_expected (= mu_full - mu_base).
+    Columns: obs, mu_base (heat terms zeroed), mu_full (expectation given observed
+    temperature), mu_norm (expectation if the temperature were the climatological normal
+    for the date; needs temp_ref), u_* (NB upper limits), heat_expected (= mu_full - mu_base).
+
+    Alarms:
+      alarm_norm        obs > u_norm: more calls than this date sees at normal temperature.
+                        This is the surveillance alarm (requires temp_ref).
+      alarm_unexplained obs > u_full: more calls than even the heat model expects.
+      alarm_excess      obs > u_base: kept for reference only. With a low T0 the heat-zeroed
+                        baseline sits far below ordinary summer counts, so it fires all summer.
     """
     out = []
     d, end = pd.Timestamp(start), pd.Timestamp(end)
@@ -182,6 +232,8 @@ def surveil(y, temp, start, end, T0, train_years=3, refit_every=7, alpha=0.005, 
         m = HeatModel("prosp", T0).fit(hist, temp, exclude)
         block = pd.date_range(d, min(d + pd.Timedelta(days=refit_every - 1), end))
         p = m.predict(block, temp)
+        if temp_ref is not None:
+            p["mu_norm"] = m.predict(block, temp_ref)["mu_full"]
         p["phi"] = m.phi
         out.append(p)
         d += pd.Timedelta(days=refit_every)
@@ -190,23 +242,34 @@ def surveil(y, temp, start, end, T0, train_years=3, refit_every=7, alpha=0.005, 
     s["u_base"] = [nb_upper(m_, ph, alpha) for m_, ph in zip(s["mu_base"], s["phi"])]
     s["u_full"] = [nb_upper(m_, ph, alpha) for m_, ph in zip(s["mu_full"], s["phi"])]
     s["alarm_excess"] = s["obs"] > s["u_base"]
+    if "mu_norm" in s:
+        s["u_norm"] = [nb_upper(m_, ph, alpha) for m_, ph in zip(s["mu_norm"], s["phi"])]
+        s["alarm_norm"] = s["obs"] > s["u_norm"]
+    s["alarm"] = s["alarm_norm"] if "alarm_norm" in s else s["alarm_excess"]
     s["alarm_unexplained"] = s["obs"] > s["u_full"]
-    s["heat_expected"] = s["mu_full"] - s["mu_base"]
-    s["excess_obs"] = s["obs"] - s["mu_base"]
+    ref = s["mu_norm"] if "mu_norm" in s else s["mu_base"]
+    s["heat_expected"] = s["mu_full"] - ref          # model-predicted excess over normal Tmax
+    s["excess_obs"] = s["obs"] - ref                 # observed excess over normal Tmax
+    s["heat_attrib_T0"] = s["mu_full"] - s["mu_base"]  # all calls attributable to Tmax above T0
     s["temp"] = temp.reindex(s.index)
     return s
 
 
-def forecast(y, temp, T0, train_years=3, exclude=None):
-    """Expected heat-attributable calls for forecast days (temp rows flagged forecast)."""
+def forecast(y, temp, T0, train_years=3, exclude=None, days=None, temp_ref=None):
+    """Expected calls on forecast days. `days`: the dates that are genuine weather forecasts
+    (wx['forecast'] == True). Observed weather after the last EMS day is NOT a forecast and is
+    ignored. heat_expected = expected calls minus expected at normal Tmax (if temp_ref given)."""
     last = y.index.max()
-    fut = temp.index[temp.index > last]
+    fut = pd.DatetimeIndex(days if days is not None else [])
+    fut = fut[fut > last]
     if len(fut) == 0:
         return None
     hist = y[last - pd.DateOffset(years=train_years): last]
     m = HeatModel("prosp", T0).fit(hist, temp, exclude)
     p = m.predict(fut, temp)
-    p["heat_expected"] = p["mu_full"] - p["mu_base"]
+    ref = m.predict(fut, temp_ref)["mu_full"] if temp_ref is not None else p["mu_base"]
+    p["mu_norm"] = ref
+    p["heat_expected"] = p["mu_full"] - ref
     p["temp"] = temp.reindex(fut)
     return p
 
@@ -230,14 +293,16 @@ def backtest_events(surv, events, after=3):
         win = surv.loc[e["start"]: e["end"] + pd.Timedelta(days=after)]
         if win.empty:
             continue
-        alarms = win.index[win["alarm_excess"]]
+        acol = "alarm_norm" if "alarm_norm" in win else "alarm_excess"
+        alarms = win.index[win[acol]]
         first = alarms.min() if len(alarms) else None
         rows.append(dict(
             start=e["start"].date(), end=e["end"].date(), days=e["days"], peak_tmax=e["peak"],
-            alarm_days=int(win["alarm_excess"].sum()),
+            alarm_days=int(win[acol].sum()),
             first_alarm=first.date() if first is not None else None,
             days_to_first_alarm=(first - e["start"]).days if first is not None else None,
-            obs=float(win["obs"].sum()), expected_seasonal=float(win["mu_base"].sum()),
+            obs=float(win["obs"].sum()),
+            expected_normal=float(win["mu_norm"].sum() if "mu_norm" in win else win["mu_base"].sum()),
             excess_obs=float(win["excess_obs"].sum()), heat_expected=float(win["heat_expected"].sum()),
             unexplained_days=int(win["alarm_unexplained"].sum()),
         ))
@@ -253,11 +318,11 @@ def poisson_ci(o, alpha=0.05):
     return lo, hi
 
 
-def zip_ratios(zip_daily, types, surv, event, temp, T0, after=3, min_ref=20):
+def zip_ratios(zip_daily, types, surv, event, temp, T0=None, after=3, min_ref=20, ref_max=29.4):
     """
     Indirectly standardised ratio per zip for one heat wave.
       share_z   = zip's share of the outcome on reference days (Jun-Sep of the event year
-                  and the year before, Tmax < T0, outside the heat wave window)
+                  and the year before, Tmax < ref_max (29.4 C = 85 F), outside the heat wave window)
       E_z       = share_z * sum(mu_base over window)     -> SIR_z = O_z / E_z
       relative  = SIR_z / citywide SIR   (> 1: zip hit harder than the city as a whole)
     """
@@ -265,13 +330,13 @@ def zip_ratios(zip_daily, types, surv, event, temp, T0, after=3, min_ref=20):
     s, e = pd.Timestamp(event["start"]), pd.Timestamp(event["end"]) + pd.Timedelta(days=after)
     yr = s.year
     ref_days = z.index[z.index.year.isin([yr - 1, yr]) & z.index.month.isin([6, 7, 8, 9])]
-    ref_days = ref_days[(temp.reindex(ref_days) < T0).values]
+    ref_days = ref_days[(temp.reindex(ref_days) < ref_max).values]
     ref_days = ref_days[(ref_days < s - pd.Timedelta(days=3)) | (ref_days > e)]
     ref = z.loc[ref_days].sum()
     ref = ref[ref.index != "UNKNOWN"]
     share = ref / ref.sum()
     win = z.loc[s:e].sum().reindex(share.index, fill_value=0)
-    E_city = surv.loc[s:e, "mu_base"].sum()
+    E_city = surv.loc[s:e, "mu_norm" if "mu_norm" in surv else "mu_base"].sum()
     O_city = surv.loc[s:e, "obs"].sum()
     E = share * E_city
     out = pd.DataFrame({"obs": win, "expected": E, "ref_calls": ref})
