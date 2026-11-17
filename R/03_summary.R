@@ -61,18 +61,46 @@ fig <- paste0('<img src="data:image/png;base64,',
 
 html <- sprintf('<!doctype html><html><head><meta charset="utf-8"><title>EMS Heat Watch</title><style>
 @page { size: Letter; margin: 0.4in 0.55in; }
-body { font-family: "Helvetica Neue", Arial, sans-serif; color: #0b0b0b; font-size: 9.4pt; line-height: 1.33; margin: 0; }
-h1 { font-size: 18pt; margin: 0 0 2px; } h2 { font-size: 10.5pt; margin: 9px 0 3px; }
-.sub { color: #52514e; margin: 0 0 12px; } p { margin: 3px 0 6px; } ul { margin: 3px 0 6px 18px; padding: 0; } li { margin-bottom: 3px; }
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 6px 0 4px; }
-.tile { border: 1px solid #e4e2dc; border-radius: 6px; padding: 8px 10px; } .tile b { display: block; font-size: 16pt; }
-.tile span, .note { color: #52514e; font-size: 8.6pt; }
-table { border-collapse: collapse; width: 100%%; font-size: 9.2pt; } th, td { padding: 3px 6px; border-bottom: 1px solid #eee; text-align: right; }
-th:first-child, td:first-child { text-align: left; } th { color: #52514e; font-weight: 600; }
-img { width: 100%%; height: auto; }
-</style></head><body>
-<h1>EMS Heat Watch</h1>
-<p class="sub">Can ambulance calls show the health impact of heat within days? A proof of concept on public New York City data. %sgithub.com/samielsabri/ems-heat-watch</p>
+:root { --ink: #0b0b0b; --muted: #57564f; --line: #e6e3dc; --blue: #2a78d6; --tint: #f3f7fc; }
+body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); font-size: 9.4pt; line-height: 1.38;
+       margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.page { max-width: 7.4in; margin: 0 auto; }
+header { border-bottom: 2px solid var(--blue); padding-bottom: 8px; margin-bottom: 12px; }
+h1 { font-size: 19pt; margin: 0 0 3px; letter-spacing: -0.01em; }
+h2 { font-size: 10.5pt; margin: 12px 0 4px; }
+.sub { color: var(--muted); margin: 0; }
+p { margin: 3px 0 6px; } ul { margin: 3px 0 6px 18px; padding: 0; } li { margin-bottom: 3px; }
+.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 6px; }
+.tile { background: var(--tint); border-radius: 8px; padding: 9px 12px; }
+.tile b { display: block; font-size: 17pt; color: var(--blue); margin-bottom: 1px; }
+.tile span, .note, figcaption { color: var(--muted); font-size: 8.6pt; }
+table { border-collapse: collapse; width: 100%%; font-size: 9.2pt; font-variant-numeric: tabular-nums; }
+th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--muted); font-weight: 600; }
+thead tr:first-child th { text-align: center; border-bottom: 1px solid var(--line); padding-bottom: 2px; }
+thead tr:first-child th:first-child { border-bottom: none; }
+tbody tr:first-child td { font-weight: 600; }
+figure { margin: 10px 0 4px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px 6px; }
+figure img { width: 100%%; height: auto; display: block; } figcaption { margin-top: 4px; }
+.cols { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media screen {
+  html { background: #eeece7; }
+  body { font-size: 10.5pt; }
+  .page { max-width: 820px; margin: 32px auto; background: #fff; padding: 40px 48px; border-radius: 10px;
+          box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
+}
+@media print {
+  body { font-size: 9pt; line-height: 1.32; } h1 { font-size: 17pt; } h2 { margin: 8px 0 3px; }
+  header { padding-bottom: 6px; margin-bottom: 8px; } .tile { padding: 6px 10px; } .tile b { font-size: 15pt; }
+  figure { padding: 4px 8px 4px; margin: 6px 0 2px; } li { margin-bottom: 2px; }
+}
+@media screen and (max-width: 700px) {
+  .page { margin: 0; padding: 20px 16px; border-radius: 0; } .tiles, .cols { grid-template-columns: 1fr; }
+}
+</style></head><body><main class="page">
+<header><h1>EMS Heat Watch</h1>
+<p class="sub">Can ambulance calls show the health impact of heat within days? A proof of concept on public New York City data.<br>%sgithub.com/samielsabri/ems-heat-watch</p></header>
 <div class="tiles">
 <div class="tile"><b>%d of %d</b><span>recent heat waves (2025–26, held out) flagged on their first day</span></div>
 <div class="tile"><b>~%.0f per summer</b><span>false alarms on ordinary summer days (2016–24)</span></div>
@@ -91,11 +119,14 @@ Alarm when calls are above the expected range.</li>
 Compare with two standard outbreak-detection methods. Nothing was tuned on 2025–26.</li>
 </ul>
 <h2>Results</h2>
-<table><tr><th>Method</th><th>Heat waves flagged, 2016–24</th><th>False alarms / summer</th><th>2025–26</th><th>False alarms / summer</th></tr>
-%s%s%s</table>
+<table><thead><tr><th></th><th colspan="2">2016–24 (development)</th><th colspan="2">2025–26 (held out)</th></tr>
+<tr><th>Method</th><th>Heat waves flagged</th><th>False alarms / summer</th><th>Heat waves flagged</th><th>False alarms / summer</th></tr></thead>
+<tbody>%s%s%s</tbody></table>
 <p class="note">Analysis in R; Farrington and EARS from the <i>surveillance</i> package. False alarms are counted on cool summer days.</p>
-%s
-<p class="note">Black: heat calls per day. Blue: expected on a normal-temperature day, with its normal range. Red circles: alarms. Shaded: heat waves.</p>
+<figure>%s
+<figcaption>Heat calls per day in the two held-out summers. Black: observed. Blue line and band: expected on a normal-temperature
+day, and its normal range. Red circles: alarms. Shaded: heat waves.</figcaption></figure>
+<div class="cols"><div>
 <h2>What it means for Toronto</h2>
 <ul>
 <li>Environment and Climate Change Canada warns 18–24 hours ahead for heat events of two or more days. An EMS indicator adds
@@ -103,12 +134,14 @@ the health side: is the heat causing harm, and how much? It does not predict hea
 <li>Single hot days usually get no warning. In NYC the indicator flagged %d%% of them (2016–24).</li>
 <li>Next step: the same indicator on Toronto Paramedic Services data, using humidex.</li>
 </ul>
+</div><div>
 <h2>Limits</h2>
 <ul>
 <li>Dispatch codes record what callers and crews report, not diagnoses.</li>
 <li>Only three heat waves in the held-out period. NYC data and one weather station; not yet tested in Toronto.</li>
 </ul>
-</body></html>',
+</div></div>
+</main></body></html>',
   by, get("heldout", "indicator", "detected"), get("heldout", "indicator", "heat_waves"),
   get("development", "indicator", "false_alarms_per_summer"), lag, per_year, format(last, "%B %Y"),
   row("This indicator", "indicator"), row("Farrington Flexible", "farrington"), ears_row, fig,
