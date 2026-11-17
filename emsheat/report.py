@@ -12,22 +12,34 @@ import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-INK, MUTED, GRID = "#1f2328", "#6b7280", "#e5e7eb"
-OBS, BASE, HEATC, ALARM, WAVE = "#1f2328", "#2563eb", "#d9480f", "#c92a2a", "#fff1e6"
+INK, MUTED, GRID = "#0b0b0b", "#52514e", "#e7e5e0"
+OBS, BASE, HEATC, ALARM, WAVE, TEMPC = "#0b0b0b", "#2a78d6", "#eb6834", "#e34948", "#fbe6d6", "#52514e"
 
 plt.rcParams.update({
-    "font.size": 9.5, "axes.edgecolor": GRID, "axes.labelcolor": MUTED, "xtick.color": MUTED,
-    "ytick.color": MUTED, "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True,
-    "grid.color": GRID, "grid.linewidth": 0.6, "axes.titlesize": 10.5, "axes.titleweight": "bold",
-    "axes.titlelocation": "left", "legend.frameon": False, "figure.dpi": 110,
+    "font.size": 9.5, "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica Neue", "Helvetica", "Arial", "DejaVu Sans"],
+    "axes.edgecolor": GRID, "axes.labelcolor": MUTED, "xtick.color": MUTED, "ytick.color": MUTED,
+    "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": GRID,
+    "grid.linewidth": 0.6, "axes.titlesize": 9.5, "axes.titleweight": "normal", "axes.titlecolor": MUTED,
+    "axes.titlelocation": "left", "legend.frameon": False, "svg.fonttype": "none",
 })
 
 
 def _png(fig):
+    """Vector output (SVG, real text) so figures stay sharp at any size. Name kept for call sites."""
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=160, bbox_inches="tight")
+    fig.savefig(buf, format="svg", bbox_inches="tight", pad_inches=0.08)
     plt.close(fig)
     return base64.b64encode(buf.getvalue()).decode()
+
+
+def _legend_below(fig, handles, ncol, ax=None, y=-0.16):
+    """Legend outside the plot area. With ax: anchored under that axis (bbox_inches='tight' grows the canvas)."""
+    kw = dict(handles=handles, ncol=ncol, fontsize=8.5, handlelength=1.8, columnspacing=1.6)
+    if ax is not None:
+        ax.legend(loc="upper center", bbox_to_anchor=(0.5, y), **kw)
+    else:
+        fig.legend(loc="lower center", bbox_to_anchor=(0.5, -0.01), **kw)
 
 
 def _shade_waves(ax, events, lo, hi):
@@ -38,75 +50,119 @@ def _shade_waves(ax, events, lo, hi):
 
 
 def fig_operational(ctx, name, days=60):
+    """Left: the last `days` days of EMS data. Right (if a forecast exists): the next 7 days.
+    The gap between the last EMS day and today (publication lag) is stated, not plotted."""
+    from matplotlib.gridspec import GridSpec
+    from matplotlib.lines import Line2D
+    from matplotlib.patches import Patch
     r = ctx["results"][name]
     s = r["surv"].iloc[-days:]
     fc = r["forecast"]
+    has_fc = fc is not None and len(fc) > 0
     temp = ctx["temp"]
-    fig, (ax, axt) = plt.subplots(2, 1, figsize=(8.6, 4.6), sharex=True, gridspec_kw={"height_ratios": [3, 1.2]})
-    lo, hi = s.index.min(), (fc.index.max() if fc is not None and len(fc) else s.index.max())
-    _shade_waves(ax, ctx["events"], lo, hi)
-    _shade_waves(axt, ctx["events"], lo, hi)
     ref, uref = ("mu_norm", "u_norm") if "mu_norm" in s else ("mu_base", "u_base")
-    ax.fill_between(s.index, s[ref], s[uref], color=BASE, alpha=0.10, lw=0, step="mid",
-                    label=f"expected at normal Tmax to alarm threshold")
-    ax.plot(s.index, s[ref], color=BASE, lw=1.2, label="expected at normal Tmax for the date")
-    ax.plot(s.index, s["mu_full"], color=HEATC, lw=1.1, ls="--", label="expected given temperature")
-    ax.plot(s.index, s["obs"], color=OBS, lw=1.3, marker="o", ms=2.4, label="observed")
+
+    fig = plt.figure(figsize=(9.6, 4.9))
+    gs = GridSpec(2, 2 if has_fc else 1, figure=fig, width_ratios=[5, 1.25] if has_fc else [1],
+                  height_ratios=[3, 1.2], wspace=0.07, hspace=0.12)
+    ax = fig.add_subplot(gs[0, 0])
+    axt = fig.add_subplot(gs[1, 0], sharex=ax)
+    lo, last = s.index.min(), s.index.max()
+
+    _shade_waves(ax, ctx["events"], lo, last)
+    ax.fill_between(s.index, s[ref], s[uref], color=BASE, alpha=0.12, lw=0, step="mid")
+    ax.plot(s.index, s[ref], color=BASE, lw=1.6)
+    ax.plot(s.index, s["mu_full"], color=HEATC, lw=1.4, ls=(0, (4, 2)))
+    ax.plot(s.index, s["obs"], color=OBS, lw=1.2, marker="o", ms=2.6)
     al = s[s["alarm"]]
-    ax.scatter(al.index, al["obs"], s=42, facecolor="none", edgecolor=ALARM, lw=1.4, zorder=5, label="alarm")
-    if fc is not None and len(fc):
-        ax.plot(fc.index, fc["mu_full"], color=HEATC, lw=1.4, ls="--")
-        ax.axvline(ctx["last"] + pd.Timedelta(hours=12), color=MUTED, lw=0.8)
-        ax.text(ctx["last"] + pd.Timedelta(hours=18), ax.get_ylim()[1] * 0.97, "forecast", color=MUTED,
-                va="top", fontsize=8.5)
-    ax.set_title(f"{name}: last {days} days" + (" and 7-day outlook" if fc is not None and len(fc) else ""))
+    ax.scatter(al.index, al["obs"], s=70, facecolor="none", edgecolor=ALARM, lw=1.8, zorder=5)
     ax.set_ylabel("calls per day")
-    ax.legend(loc="upper left", fontsize=8, ncol=2)
-    tt = temp[lo:hi]
-    isfc = tt.index > ctx["last"]
-    axt.plot(tt.index[~isfc], tt[~isfc], color=HEATC, lw=1.2)
-    axt.plot(tt.index[isfc], tt[isfc], color=HEATC, lw=1.2, ls=":")
-    axt.axhline(r["T0"], color=MUTED, lw=0.8, ls="--")
-    axt.text(lo, r["T0"] + 0.4, f"T0 {r['T0']:.1f} °C", color=MUTED, fontsize=8)
+    ax.set_title(f"EMS data, {lo:%d %b} to {last:%d %b %Y}")
+    ax.set_ylim(bottom=0)
+    plt.setp(ax.get_xticklabels(), visible=False)
+
+    tt = temp[lo:last]
+    axt.plot(tt.index, tt.values, color=TEMPC, lw=1.3)
+    axt.axhline(r["T0"], color=MUTED, lw=0.8, ls=(0, (2, 2)))
+    axt.annotate(f"heat threshold T0 {r['T0']:.1f} °C", (lo, r["T0"]), xytext=(2, 3), textcoords="offset points",
+                 color=MUTED, fontsize=8)
     axt.set_ylabel("Tmax °C")
+    axt.xaxis.set_major_locator(mdates.WeekdayLocator(byweekday=mdates.MO, interval=2))
     axt.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
-    fig.tight_layout()
+
+    if has_fc:
+        axf = fig.add_subplot(gs[0, 1], sharey=ax)
+        axft = fig.add_subplot(gs[1, 1], sharey=axt, sharex=axf)
+        axf.plot(fc.index, fc["mu_norm"], color=BASE, lw=1.6, marker="o", ms=2.6)
+        axf.plot(fc.index, fc["mu_full"], color=HEATC, lw=1.4, ls=(0, (4, 2)), marker="o", ms=2.6)
+        lag = (fc.index.min() - last).days
+        axf.set_title("Forecast, next 7 days")
+        axf.text(0.02, 0.97, f"{lag}-day publication gap\nnot shown", transform=axf.transAxes, va="top",
+                 fontsize=8, color=MUTED)
+        plt.setp(axf.get_yticklabels(), visible=False)
+        plt.setp(axf.get_xticklabels(), visible=False)
+        axft.plot(fc.index, fc["temp"], color=TEMPC, lw=1.3, ls=(0, (1, 1.5)), marker="o", ms=2.6)
+        axft.axhline(r["T0"], color=MUTED, lw=0.8, ls=(0, (2, 2)))
+        plt.setp(axft.get_yticklabels(), visible=False)
+        axft.xaxis.set_major_locator(mdates.DayLocator(interval=3))
+        axft.xaxis.set_major_formatter(mdates.DateFormatter("%d %b"))
+        for a_ in (axf, axft):
+            a_.spines["left"].set_visible(False)
+            a_.tick_params(axis="y", length=0)
+
+    handles = [Line2D([], [], color=OBS, lw=1.2, marker="o", ms=3, label="observed calls"),
+               Line2D([], [], color=BASE, lw=1.6, label="expected at normal Tmax"),
+               Patch(color=BASE, alpha=0.12, label="up to the 99.5% alarm limit"),
+               Line2D([], [], color=HEATC, lw=1.4, ls=(0, (4, 2)), label="expected given actual Tmax"),
+               Line2D([], [], ls="", marker="o", ms=7, mfc="none", mec=ALARM, mew=1.8, label="alarm")]
+    ev = ctx["events"]
+    if len(ev) and ((ev["end"] >= lo) & (ev["start"] <= last)).any():
+        handles.append(Patch(color=WAVE, label="heat wave"))
+    _legend_below(fig, handles, 3)
+    fig.subplots_adjust(bottom=0.2)
     return _png(fig)
 
 
 def fig_timeline(ctx, name):
     r = ctx["results"][name]
     s = r["surv"]
-    fig, ax = plt.subplots(figsize=(8.6, 2.9))
+    fig, ax = plt.subplots(figsize=(9.6, 3.2))
     _shade_waves(ax, ctx["events"], s.index.min(), s.index.max())
-    ax.plot(s.index, s["obs"], color=OBS, lw=0.7, label="observed")
+    ax.plot(s.index, s["obs"], color=OBS, lw=0.8, label="observed calls")
     ref = "mu_norm" if "mu_norm" in s else "mu_base"
-    ax.plot(s.index, s[ref], color=BASE, lw=1.1, label="expected at normal Tmax")
+    ax.plot(s.index, s[ref], color=BASE, lw=1.4, label="expected at normal Tmax")
     al = s[s["alarm"]]
-    ax.scatter(al.index, al["obs"], s=16, color=ALARM, zorder=5, label="alarm")
-    ax.set_title(f"{name}: prospective surveillance over the evaluation period (heat waves shaded)")
+    ax.scatter(al.index, al["obs"], s=22, facecolor="none", edgecolor=ALARM, lw=1.4, zorder=5, label="alarm")
+    from matplotlib.patches import Patch
     ax.set_ylabel("calls per day")
-    ax.legend(loc="upper left", fontsize=8, ncol=3)
+    ax.set_ylim(bottom=0)
+    h, _ = ax.get_legend_handles_labels()
+    _legend_below(fig, h + [Patch(color=WAVE, label="heat wave")], 4, ax=ax, y=-0.12)
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b %Y"))
     fig.tight_layout()
     return _png(fig)
 
 
 def fig_curves(ctx):
-    fig, ax = plt.subplots(figsize=(5.4, 3.4))
-    temps = np.linspace(20, 38, 100)
-    cols = ["#d9480f", "#7048e8", "#1f2328", "#2b8a3e"]
-    for (name, r), c in zip(ctx["results"].items(), cols):
+    """Heat-coded calls rise ~1000-fold over the range, broad outcomes a few percent: separate panels."""
+    temps = np.linspace(15, 38, 100)
+    cols = ["#eb6834", "#2a78d6", "#1baf7a", "#6250d6"]
+    items = list(ctx["results"].items())
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(9.6, 3.3), gridspec_kw={"wspace": 0.28})
+    for k, ((name, r), c) in enumerate(zip(items, cols)):
+        ax = a1 if k == 0 else a2
         cv = r["retro"].curve(temps)
-        ax.plot(cv["temp"], cv["rr"], color=c, lw=1.6, label=name)
-        ax.fill_between(cv["temp"], cv["lo"], cv["hi"], color=c, alpha=0.12, lw=0)
-    ax.set_yscale("log")
-    ax.axhline(1, color=MUTED, lw=0.8)
-    ax.set_xlabel("sustained daily Tmax, °C")
-    ax.set_ylabel("rate ratio (log scale)")
-    ax.set_title("Exposure-response (training period)")
-    ax.legend(fontsize=7.5, loc="upper left")
-    fig.tight_layout()
+        ax.plot(cv["temp"], cv["rr"], color=c, lw=1.8, label=name)
+        ax.fill_between(cv["temp"], cv["lo"], cv["hi"], color=c, alpha=0.15, lw=0)
+    a1.set_yscale("log")
+    a1.set_title(items[0][0] + " (log scale)")
+    a2.set_title("Broader outcomes")
+    for ax in (a1, a2):
+        ax.axhline(1, color=MUTED, lw=0.8)
+        ax.set_xlabel("sustained daily Tmax, °C")
+    a1.set_ylabel("rate ratio vs below T0")
+    if len(items) > 1:
+        _legend_below(fig, a2.get_legend_handles_labels()[0], 1, ax=a2, y=-0.22)
     return _png(fig)
 
 
@@ -251,7 +307,7 @@ def write(ctx, out):
                   f"({html.escape(', '.join(ctx['zip_types']))}), since heat-coded calls alone are too sparse per zip. Expected counts use each zip's "
                   f"share on ordinary summer days (Jun–Sep of that year and the year before, Tmax &lt; 29.4 °C, outside the wave), scaled to the citywide expectation. "
                   f"<code>relative</code> above 1 means the zip was hit harder than the city as a whole; check the confidence interval before reading anything into it.</p>"
-                  f"<div class='grid2'><img src='data:image/png;base64,{fig_zips(zr, 'Top zips, all evaluated heat waves')}'>"
+                  f"<div class='grid2'><img src='data:image/svg+xml;base64,{fig_zips(zr, 'Top zips, all evaluated heat waves')}'>"
                   + _table(zt[["zipcode", "obs", "expected", "sir", "sir_lo", "sir_hi", "relative"]],
                            {"expected": "{:.1f}", "sir": "{:.2f}", "sir_lo": "{:.2f}", "sir_hi": "{:.2f}",
                             "relative": "{:.2f}"}) + "</div>")
@@ -271,10 +327,11 @@ def write(ctx, out):
 models trained to {ctx['train_end'].date()}; prospective evaluation from {ctx['eval_start'].date()}.
 Primary outcome: <b>{html.escape(prim)}</b>{' (' + ', '.join(rp['types']) + ')' if rp['types'] and len(rp['types']) < 12 else ''}.</p>
 <div class="kpis">{kpis}</div>
-<img src="data:image/png;base64,{fig_operational(ctx, prim)}">
+<h2>{html.escape(prim)}: latest data{' and 7-day outlook' if fresh.get('has_forecast') else ''}</h2>
+<img src="data:image/svg+xml;base64,{fig_operational(ctx, prim)}">
 <p class="note">Blue line: calls expected for this date at its normal Tmax (trend, season, weekday, holidays, normal temperature).
 Shaded band: from that expectation up to the {100 * (1 - ctx['alpha']):.1f}% alarm limit. Orange dashed: calls expected given the observed
-temperature. Circles: alarm days (observed above the band). Lower panel: Tmax, with the heat threshold T0. {'Dotted segment: forecast Tmax.' if fresh.get('has_forecast') else 'No forecast weather in this run, so no outlook is shown.'}</p>
+temperature. Circles: alarm days (observed above the band). Lower panel: daily Tmax with the heat threshold T0. {'Right-hand panels: the 7-day forecast; the days between the last published EMS record and today are not shown.' if fresh.get('has_forecast') else 'No forecast weather in this run, so no outlook is shown.'}</p>
 
 <h2>Timeliness compared with a six-month lag</h2>
 <p>As of {fresh['asof']}, this pipeline sees data to {fresh['last_complete']} ({fresh['lag_days']} day lag). It covers
@@ -293,16 +350,18 @@ expectation. Close agreement means the model sizes the impact correctly.</p>
 small heat effect relative to their day-to-day variation, so their excess is inconsistent between waves and rarely crosses the alarm limit:
 use them to size impact after the fact, not to alarm.</p>
 
-<img src="data:image/png;base64,{fig_timeline(ctx, prim)}">
+<h2>{html.escape(prim)}: prospective surveillance, evaluation period</h2>
+<img src="data:image/svg+xml;base64,{fig_timeline(ctx, prim)}">
 
 <h2>Heat effect by outcome</h2>
-<div class="grid2"><img src="data:image/png;base64,{fig_curves(ctx)}">
+<img src="data:image/svg+xml;base64,{fig_curves(ctx)}">
+<div>
 {_table(eff, {"mean_per_day": "{:.1f}", "T0": "{:.1f}", "pct_per_degC": "{:+.1f}", "lo": "{:+.1f}", "hi": "{:+.1f}", "overdispersion": "{:.2f}"})}</div>
 <p class="note">Cumulative change in daily calls per °C of sustained Tmax above threshold T0 (lags 0–3), from a quasi-Poisson time-series
 model with a natural spline of time, day of week and holidays. Fitted on the training period only.</p>
 
 <h2>Which call types respond to heat</h2>
-<div class="grid2"><img src="data:image/png;base64,{fig_screen(ctx)}">
+<div class="grid2"><img src="data:image/svg+xml;base64,{fig_screen(ctx)}">
 {_table(scr, {"mean_daily": "{:.1f}", "%/°C": "{:+.1f}", "lo": "{:+.1f}", "hi": "{:+.1f}", "q": "{:.3g}"})}</div>
 <p class="note">Exploratory. Each final call type used throughout the training years (code variants merged) with ≥1 call/day was
 screened on the training period; listed as heat-sensitive if FDR q &lt; 0.05 and ≥ +2%/°C. The surveillance syndrome is NOT taken
