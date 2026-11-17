@@ -10,6 +10,8 @@ Owner is an epidemiologist/data scientist: be direct, concise, don't over-explai
                      indicator (3 yrs, alarm = obs > NB 99.5% limit of expected at normal Tmax), Farrington Flexible +
                      EARS C1-C3 from `surveillance`, heat-wave back-test -> output/
 - `R/03_summary.R`   docs/figure.svg, docs/summary.html, docs/summary.pdf (headless Chrome if present)
+- `R/04_dashboard_data.R` docs/dashboard_data.js for the static dashboard docs/index.html (Plotly 2.35.2 from jsDelivr;
+                     GitHub Pages from main /docs). 02_analysis.R writes a day_type column used by the dashboard.
 - The earlier Python pipeline (store, HTML report, zip ratios, synthetic tests, call-type screen) lives on branch
   `full-pipeline`. Don't bring it back to main unless asked.
 

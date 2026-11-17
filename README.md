@@ -7,7 +7,8 @@ A proof of concept on public New York City data. A simple indicator built on NYC
 19 of 20 heat waves in 2016–2024 and all 3 in 2025–2026, a period that was held out and not used to build it.
 It raised about 2 false alarms per summer.
 
-One-page summary: [docs/summary.pdf](docs/summary.pdf)
+One-page summary: [docs/summary.pdf](docs/summary.pdf) · Interactive dashboard: [docs/index.html](docs/index.html)
+(live at https://samielsabri.github.io/ems-heat-watch/ once GitHub Pages is switched on)
 
 ## The idea
 
@@ -28,6 +29,8 @@ is a same-day signal that heat is harming people.
    alarms are counted on cool summer days. The same is done for two standard outbreak-detection methods,
    Farrington Flexible and EARS C1–C3, from the R `surveillance` package.
 4. **Summary** (`R/03_summary.R`): figure and one-page summary in `docs/`.
+5. **Dashboard** (`R/04_dashboard_data.R`): writes the results to `docs/dashboard_data.js` for the interactive
+   page `docs/index.html`. Pick a year and a method to see daily heat calls, alarms and heat waves.
 
 ## Results
 
@@ -49,6 +52,7 @@ Rscript -e 'install.packages(c("jsonlite", "surveillance"))'
 Rscript R/01_get_data.R              # optional, refreshes data/
 Rscript R/02_analysis.R              # about 2 minutes
 Rscript R/03_summary.R              # writes docs/summary.pdf if Chrome is installed
+Rscript R/04_dashboard_data.R       # then open docs/index.html
 ```
 
 In RStudio: open `ems-heat-watch.Rproj`, then open each script in `R/` and click Source.

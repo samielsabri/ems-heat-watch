@@ -122,6 +122,8 @@ backtest <- do.call(rbind, lapply(names(periods), function(p) do.call(rbind, lap
              hot_single_days_flagged = round(mean(a[sel & hot_single_day]), 3))
 }))))
 
+ind$day_type <- ifelse(covid(d), "excluded", ifelse(in_wave, "heat_wave", ifelse(hot_single_day, "hot_single_day",
+                       ifelse(non_heat_day, "cool_summer_day", "other"))))
 write.csv(ind, "output/daily_indicator.csv", row.names = FALSE)
 write.csv(waves, "output/heat_waves.csv", row.names = FALSE)
 write.csv(backtest, "output/backtest.csv", row.names = FALSE)
