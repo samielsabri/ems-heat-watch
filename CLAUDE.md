@@ -7,7 +7,8 @@ Owner is an epidemiologist/data scientist: be direct, concise, don't over-explai
 
 ## Layout
 - `emsheat/ingest.py`  stream JSON/CSV exports into daily aggregates (`type_daily`, `zip_daily`) + `state.json` watermark.
-- `emsheat/fetch.py`   Socrata download, keyset-paged and resumable; `probe` lists live call types.
+- `emsheat/fetch.py`   Socrata: `fetch_aggregates` (server-side daily counts, month cache, resumable; preferred),
+                       `daily_counts` (for `verify`), legacy offset-paged row pull; `probe` lists live call types.
 - `emsheat/weather.py` Open-Meteo / NOAA / CSV daily Tmax.
 - `emsheat/model.py`   threshold heat model (lags 0-3), quasi-Poisson; prospective weekly-refit surveillance; zip SIRs.
 - `emsheat/analyze.py` orchestration; `emsheat/report.py` single-file HTML report; `emsheat/__main__.py` CLI.
@@ -33,8 +34,10 @@ python synth/make_synthetic.py && python synth/check_truth.py   # end-to-end tes
 - NYC re-labelled codes (CARDBR from 2017, EDP split, *FC variants 2020-23): merge families via model.merge_variants.
 - Mar-Jul 2020 is excluded from all fits (COVID).
 - Keep all fetch/ingest runs on the same `--zip-since`.
-- Preferred data path: `fetch-agg` (server-side daily aggregates) + `verify`. The row-level keyset `fetch` rewrite lives
-  only on the owner's Mac (uncommitted) and still needs merging.
+- Data path: `fetch-agg` (server-side daily aggregates) + `verify`. The row-level keyset `fetch` rewrite was never
+  committed and is not recoverable (closed 2026-11-17); row `fetch` is legacy, offset-paged, and no longer deletes raw/.
+- Weather: back-test and README numbers use Central Park station Tmax (data/central_park_tmax.csv). `--forecast` appends
+  Open-Meteo forecast days to it. `--weather open-meteo` is ERA5 grid history (hotter; different heat waves) - do not mix.
 - No docx output. Prefer pastable text or artifacts.
 
 ## How to report back

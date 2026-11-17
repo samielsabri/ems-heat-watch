@@ -138,7 +138,9 @@ def main(argv=None):
     else:
         since = pd.Timestamp(a.since) if a.since else F.incremental_since(load_state(a.store), a.lookback)
         raw = Path(a.raw) / since.strftime("%Y%m%d")
-        shutil.rmtree(raw, ignore_errors=True)
+        if raw.exists() and any(raw.iterdir()):
+            # never delete downloaded pages: write this pull to a fresh, timestamped folder instead
+            raw = raw.with_name(raw.name + "_" + pd.Timestamp.now().strftime("%H%M%S"))
         print(f"Fetching rows since {since}")
         files = F.fetch_rows(raw, since)
         if files:
