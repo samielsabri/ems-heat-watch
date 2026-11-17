@@ -9,7 +9,17 @@
 | ECCC introduced colour-coded weather alerts. | toronto.ca, Additional Heat & Health Resources |
 | Toronto heat-warning dates 2019-2026 (list below). | toronto.ca, Additional Heat & Health Resources |
 
-NOT verified: the criteria for any tier above Heat Warning (e.g. "Extreme Heat Warning" /
+ECCC impact levels (verified 2026-11-17 by the owner from canada.ca "Weather impact guides", heat section, pasted text):
+- ECCC heat alerts are graded by expected impact: **Moderate**, **High**, **Extreme** ("Adverse impacts are expected due to
+  significant heat and/or Humidex values"). Health line per level: "Increased risk of illness or death" (Moderate),
+  "Higher risk of illness or death" (High), "Extreme risk of illness or death" (Extreme). Other listed impacts: power
+  outages, water shortages, workforce impacts, outdoor event disruption, damage to infrastructure.
+- An "Extreme heat warning" product exists (linked from that page:
+  https://www.canada.ca/en/services/environment/weather/severeweather/extreme-heat-warning.html). Its meteorological
+  criteria have NOT been read.
+- URL: https://www.canada.ca/en/services/environment/weather/severeweather/weather-alerts/weather-impact-guides.html
+
+NOT verified: the meteorological criteria for any tier above Heat Warning (e.g. "Extreme Heat Warning" /
 "Extended Heat Warning"). The ECCC alert-criteria page (canada.ca) refused connections from the build
 environment, and the 2025.EX28.4 council report (secure.toronto.ca) was not reachable. Check both before
 quoting a second tier.

@@ -144,9 +144,10 @@ impact, not earlier warning than a forecast.</li>
 <div class="cols"><div>
 <h2>Fit with Toronto's heat response</h2>
 <p>Environment and Climate Change Canada issues Toronto Heat Warnings (≥2 days Tmax ≥31 °C with Tmin ≥20 °C, or humidex ≥40); TPH
-runs the Heat Relief Strategy. An EMS alarm adds the health side: during a warning it confirms and sizes impact the same day (supporting
+runs the Heat Relief Strategy. ECCC grades heat alerts by expected impact (Moderate, High, Extreme: "increased" to "extreme risk of illness
+or death"); EMS excess calls measure that health impact directly. An EMS alarm adds the health side: during a warning it confirms and sizes impact the same day (supporting
 extended cool-space hours and targeted outreach); an alarm <i>without</i> a warning flags impact the forecast criteria missed;
-after the event, excess calls feed the annual strategy review.</p>
+after the event, excess calls test whether the impact level issued matched the harm observed.</p>
 </div><div>
 <h2>Limitations</h2>
 <ul><li>Dispatch codes are caller/crew impressions, not diagnoses; NYC re-labelled codes during the period (families merged).</li>

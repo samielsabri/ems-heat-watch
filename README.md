@@ -74,7 +74,9 @@ Verified 2026-11-16 on toronto.ca (sources and dates in `docs/toronto_heat_sourc
 - Environment and Climate Change Canada (ECCC) issues Heat Warnings for Toronto. TPH stopped issuing its own in 2019.
 - A Heat Warning needs a forecast of at least 2 consecutive days with Tmax ≥ 31 °C and Tmin ≥ 20 °C, or at least 2 days with humidex ≥ 40.
 - The Heat Relief Network (500+ cool spaces) runs all summer. 24-hour cool spaces and Streets to Homes outreach are part of the response.
-- Criteria for any higher tier (for example an Extreme Heat Warning) were **not** verified. The ECCC criteria page was unreachable from the build environment. Check it before citing a second tier.
+- ECCC grades heat alerts by expected impact: Moderate, High, Extreme. Each level's health line runs from "increased" to "higher" to "extreme" risk of illness or death (ECCC weather impact guides). An "Extreme heat warning" product exists, but its meteorological criteria were **not** verified. Check them before citing them.
+
+EMS excess calls measure the health line of those impact levels directly, so the EMS signal can confirm or challenge the impact level assigned to an event.
 
 An EMS alarm is not a weather alert. It is evidence about health impact. The suggested mapping:
 
@@ -83,7 +85,7 @@ An EMS alarm is not a weather alert. It is evidence about health impact. The sug
 | ECCC Heat Warning in effect, EMS heat-coded calls not above the normal-Tmax limit | Routine: report daily counts to the heat response lead. No escalation on EMS grounds. |
 | Heat Warning in effect, EMS alarm fires | Confirm (check the data feed, dispatch-code mix, and whether one event drives it). Report excess calls vs normal and the areas most affected to the heat response lead the same day. Use this to argue for extended cool-space hours, targeted outreach, and messaging to high-risk groups. |
 | No warning in effect, EMS alarm fires (for example a hot, humid day below criteria) | Treat as a signal of under-forecast impact. Verify, then flag to the heat response lead and ECCC liaison. Log it for the review of warning criteria. |
-| After the event | Estimate excess EMS calls for the episode. Compare with mortality and ED data when they arrive. Feed the result into the annual Heat Relief Strategy review. |
+| After the event | Estimate excess EMS calls for the episode. Compare with the ECCC impact level issued (Moderate/High/Extreme) and with mortality and ED data when they arrive. Feed the result into the annual Heat Relief Strategy review. |
 
 ## Method
 
