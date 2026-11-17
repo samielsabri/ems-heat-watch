@@ -48,8 +48,10 @@ days. Full results are in `output/backtest.csv`.
 Rscript -e 'install.packages(c("jsonlite", "surveillance"))'
 Rscript R/01_get_data.R              # optional, refreshes data/
 Rscript R/02_analysis.R              # about 2 minutes
-Rscript R/03_summary.R "Your Name"   # writes docs/summary.pdf if Chrome is installed
+Rscript R/03_summary.R              # writes docs/summary.pdf if Chrome is installed
 ```
+
+In RStudio: open `ems-heat-watch.Rproj`, then open each script in `R/` and click Source.
 
 ## Limits
 

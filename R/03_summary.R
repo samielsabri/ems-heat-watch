@@ -1,8 +1,9 @@
 # Figure and one-page summary, built from output/.
 #   docs/figure.svg, docs/summary.html, and docs/summary.pdf if Chrome or Chromium is installed
-# Usage: Rscript R/03_summary.R "Your Name"
+# Usage: Rscript R/03_summary.R ["Name"]   (or Source it in RStudio)
 
-author <- commandArgs(trailingOnly = TRUE)[1]
+args <- commandArgs(trailingOnly = TRUE)
+author <- if (length(args)) args[1] else "Sami El Sabri"
 dir.create("docs", showWarnings = FALSE)
 ind <- read.csv("output/daily_indicator.csv", colClasses = c(date = "Date"))
 waves <- read.csv("output/heat_waves.csv", colClasses = c(start = "Date", end = "Date"))
@@ -51,7 +52,7 @@ ears_row <- sprintf("<tr><td>EARS C1–C3 (CDC)</td><td>%s/%d</td><td>%s</td><td
 last <- max(heat$date)
 lag <- as.numeric(Sys.Date() - last)
 per_year <- 10 * round(0.1 * mean(tapply(heat$heat_calls, format(heat$date, "%Y"), sum)[as.character(2016:2024)]))
-by <- if (!is.na(author)) paste0(author, " · ") else ""
+by <- if (nzchar(author)) paste0(author, " · ") else ""
 fig <- paste(readLines("docs/figure.svg"), collapse = "\n")
 
 html <- sprintf('<!doctype html><html><head><meta charset="utf-8"><title>EMS Heat Watch</title><style>
