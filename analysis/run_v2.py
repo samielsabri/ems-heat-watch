@@ -38,6 +38,16 @@ from emsheat.analyze import COVID_EXCLUDE, daily_wide  # noqa: E402
 from emsheat.ingest import last_complete_day, load_store  # noqa: E402
 from emsheat.syndromes import HEAT_SYNDROME  # noqa: E402
 
+# Write result CSVs at 6 significant digits so reruns on other platforms (different BLAS) do not
+# produce floating-point-noise diffs.
+_df_csv, _s_csv = pd.DataFrame.to_csv, pd.Series.to_csv
+def _csv6(orig):
+    def f(self, *a, **k):
+        k.setdefault("float_format", "%.6g")
+        return orig(self, *a, **k)
+    return f
+pd.DataFrame.to_csv, pd.Series.to_csv = _csv6(_df_csv), _csv6(_s_csv)
+
 DEV = ("2016-01-01", "2024-12-31")
 TRAIN_END = "2024-12-31"
 EVAL_START = "2025-01-01"
