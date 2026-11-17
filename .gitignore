@@ -1,11 +1,14 @@
+.Rhistory
+.RData
+.Rproj.user/
+.DS_Store
+# local leftovers from the earlier Python version
 .venv/
 __pycache__/
-*.pyc
-# downloaded / derived data (large, regenerable)
+emsheat/
 raw/
-store/
-report/
-out/
-data/synthetic/
-.DS_Store
 raw_agg/
+store/
+report*/
+data/synthetic/
+verify*.csv

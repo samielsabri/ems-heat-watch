@@ -1,0 +1,11 @@
+"period","method","heat_waves","detected","median_days_to_alarm","false_alarms_per_summer","hot_single_days_flagged"
+"development","indicator",20,19,0,1.76,0.486
+"development","farrington",20,17,1,0.29,0.236
+"development","ears_c1",20,15,0,6.46,0.292
+"development","ears_c2",20,18,0,7.34,0.417
+"development","ears_c3",20,17,1,4.4,0.222
+"heldout","indicator",3,3,0,2.07,0.688
+"heldout","farrington",3,3,0,0,0.375
+"heldout","ears_c1",3,2,0,8.27,0.5
+"heldout","ears_c2",3,3,0,7.24,0.625
+"heldout","ears_c3",3,3,0,2.07,0.438
