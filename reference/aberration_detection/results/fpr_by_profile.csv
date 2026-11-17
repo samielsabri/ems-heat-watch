@@ -1,6 +1,0 @@
-detector,high_trend,low_sparse,medium_seasonal
-EARS C1,0.042,0.028,0.036
-EARS C2,0.139,0.029,0.061
-EARS C3,0.281,0.114,0.2
-Farrington Flexible,0.018,0.025,0.032
-Harmonic GLM,0.045,0.027,0.04

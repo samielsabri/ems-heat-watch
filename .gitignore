@@ -1,11 +1,8 @@
-.venv/
-__pycache__/
-*.pyc
-# downloaded / derived data (large, regenerable)
-raw/
-store/
-report/
-out/
-data/synthetic/
+.Rhistory
+.RData
+.Rproj.user/
 .DS_Store
+# local copies from the old Python pipeline
+store/
 raw_agg/
+report*/
