@@ -1,5 +1,6 @@
 # Figure and one-page summary, built from output/.
-#   docs/figure.png, docs/summary.html, and docs/summary.pdf if a Chromium-based browser is installed
+#   docs/figure.png, docs/summary.html, and docs/summary.pdf if Chrome/Edge/Brave is installed
+#   (with Safari only, the page opens in Safari: File > Export as PDF)
 # Usage: Rscript R/03_summary.R ["Name"]   (or Source it in RStudio)
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -125,4 +126,8 @@ if (length(chrome)) {
                        paste0("--print-to-pdf=", normalizePath("docs"), "/summary.pdf"),
                        paste0("file://", normalizePath("docs/summary.html"))), stdout = FALSE, stderr = FALSE)
   cat("wrote docs/summary.pdf\n")
-} else cat("wrote docs/summary.html (open it in a browser and print to PDF)\n")
+} else {
+  # No Chromium-based browser (e.g. Safari only): open the page; in Safari use File > Export as PDF.
+  cat("wrote docs/summary.html - opening it; in Safari use File > Export as PDF, save as docs/summary.pdf\n")
+  if (interactive() || Sys.getenv("RSTUDIO") == "1") browseURL(normalizePath("docs/summary.html"))
+}
