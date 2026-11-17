@@ -2,7 +2,13 @@
 .RData
 .Rproj.user/
 .DS_Store
-# local copies from the old Python pipeline
-store/
+# local leftovers from the earlier Python version
+.venv/
+__pycache__/
+emsheat/
+raw/
 raw_agg/
+store/
 report*/
+data/synthetic/
+verify*.csv
