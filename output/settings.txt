@@ -1,3 +1,4 @@
 T0 21.5
+T0_syndrome 15
 data_to 2026-09-30
 alpha 0.005

@@ -59,15 +59,16 @@ tr.sel td { font-weight: 600; }
 <main>
 <header>
   <h1>EMS Heat Watch</h1>
-  <p>Can ambulance calls show the health impact of heat within days? Daily NYC ambulance calls coded <i>heat</i>,
-     compared with what a normal-temperature day would bring. Alarms mark days with more heat calls than expected.</p>
+  <p>Can paramedic data give early warning of heat&#39;s health impact, and measure the burden that heat-coded records
+     miss? Daily NYC ambulance calls coded <i>heat</i>, compared with what a normal-temperature day would bring.
+     Alerts mark days with more heat calls than expected.</p>
   <p class="meta" id="meta"></p>
 </header>
 
 <div class="card controls">
   <div><label>Year</label><div class="years" id="years"></div></div>
   <div><label>Show</label><span class="seg" id="span"><button data-v="season" class="on">May–Sep</button><button data-v="year">Whole year</button></span></div>
-  <div><label for="method">Alarms from</label>
+  <div><label for="method">Alerts from</label>
     <select id="method">
       <option value="indicator">This indicator</option>
       <option value="farrington">Farrington Flexible</option>
@@ -86,17 +87,23 @@ tr.sel td { font-weight: 600; }
 
 <div class="card"><h2 id="wavetitle">Heat waves</h2><div class="tw" id="waves"></div>
     <p class="note">Heat wave: 3 or more days in a row at 32.2 °C (90 °F) or above, Central Park. Cells show the day of the
-    heat wave on which each method first raised an alarm (day 0 = first day), or ✗ if it raised none.</p></div>
+    heat wave on which each method first raised an alert (day 0 = first day), or ✗ if it raised none. Excess: calls above a
+    normal-temperature day during the wave and the 3 days after (model estimate).</p></div>
+<div class="card"><h2>Hidden burden: how much of the heat excess is coded as heat?</h2><div id="burden"></div></div>
 <div class="card"><h2>All methods, all years</h2><div class="tw" id="compare"></div>
-    <p class="note">2016–24 was used to build the indicator; 2025–26 was held out. False alarms are alarms on cool summer
-    days (May–Sep, Tmax under 29.4 °C that day and the three before, away from heat waves).</p></div>
+    <p class="note">2016–24 was used to build the indicator; 2025–26 was held out. Alerts per summer are alerts outside heat
+    waves, on cool summer days (May–Sep, Tmax under 29.4 °C that day and the three before). Farrington Flexible is the
+    standard method for routine communicable disease surveillance; EARS is the CDC&#39;s syndromic method.</p></div>
 
 <div class="card about">
   <h2>How it works</h2>
   <p>Each week a Poisson regression is fitted to the previous three years of daily heat calls (season, day of week,
      trend, and temperature above a threshold). It gives the number of heat calls expected if the temperature were
-     normal for that date. An alarm is raised when calls exceed the 99.5% upper limit of that expectation. Farrington
+     normal for that date. An alert is raised when calls exceed the 99.5% upper limit of that expectation. Farrington
      Flexible and EARS C1–C3 come from the R <i>surveillance</i> package and use the call counts only.</p>
+  <p>Hidden burden: the same model is fitted to heat-related calls with other codes, chosen in advance (unconscious,
+     altered mental status, sick, breathing difficulty, cardiac, respiratory, arrest). During each heat wave, their excess
+     over a normal-temperature day is compared with the excess in heat-coded calls.</p>
   <p>Limits: dispatch codes record what callers and crews report, not diagnoses. One weather station, maximum
      temperature only. Mar–Jul 2020 (COVID) is excluded. NYC's public data is released in batches, weeks behind.</p>
   <p><a href="summary.pdf">One-page summary (PDF)</a> · <a href="https://github.com/samielsabri/ems-heat-watch">Code and data on GitHub</a></p>
@@ -113,6 +120,7 @@ const years = [...new Set(D.date.map(d => d.slice(0, 4)))];
 const state = { year: years[years.length - 1], span: "season", method: "indicator" };
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const dayNum = s => Date.UTC(+s.slice(0, 4), +s.slice(5, 7) - 1, +s.slice(8, 10)) / 864e5;
+const sign = v => v === undefined ? "–" : (v > 0 ? "+" : "") + Math.round(v).toLocaleString("en-CA");
 const fmt = s => new Date(s + "T00:00:00Z").toLocaleDateString("en-CA", { month: "short", day: "numeric", timeZone: "UTC" });
 
 document.getElementById("meta").textContent =
@@ -160,7 +168,7 @@ function render() {
   const peak = yi.reduce((b, i) => D.calls[i] > D.calls[b] ? i : b, yi[0]);
   document.getElementById("kpis").innerHTML = [
     [`${flagged} of ${yearWaves.length}`, `heat waves in ${state.year} flagged by ${METHODS[state.method]}`],
-    [`${cool.filter(i => A[i]).length}`, `false alarms (on ${cool.length} cool summer days)`],
+    [`${cool.filter(i => A[i]).length}`, `alerts outside heat waves (on ${cool.length} cool summer days)`],
     [hot1.length ? `${hot1.filter(i => A[i]).length} of ${hot1.length}` : "none", "single hot days flagged (no heat wave)"],
     [`${D.calls[peak]}`, `most heat calls in one day (${fmt(D.date[peak])}, ${D.tmax[peak]} °C)`],
   ].map(([b, s]) => `<div class="kpi"><b>${b}</b><span>${s}</span></div>`).join("");
@@ -183,7 +191,7 @@ function render() {
       name: "heat calls", hovertemplate: "heat calls %{y}<extra></extra>" },
     { x: ai.map(k => dates[k]), y: ai.map(k => pick(D.calls)[k]), type: "scatter", mode: "markers",
       marker: { color: "rgba(0,0,0,0)", size: 9, line: { color: css("--red"), width: 2 } },
-      name: "alarm (" + METHODS[state.method] + ")", hoverinfo: "skip" },
+      name: "alert (" + METHODS[state.method] + ")", hoverinfo: "skip" },
     { x: dates, y: pick(D.tmax), type: "scatter", mode: "lines", line: { color: css("--temp"), width: 1.3 },
       name: "max temperature", xaxis: "x", yaxis: "y2", hovertemplate: "Tmax %{y} °C<extra></extra>", showlegend: false },
   ];
@@ -207,18 +215,35 @@ function render() {
   // heat wave table for the year
   document.getElementById("wavetitle").textContent = `Heat waves in ${state.year}`;
   const head = "<tr><th>Dates</th><th>Days</th><th>Peak °C</th>" +
-    Object.values(METHODS).map(m => `<th>${m.replace("Farrington Flexible", "Farrington").replace("This indicator", "Indicator")}</th>`).join("") + "</tr>";
-  const rows = yearWaves.map(w => "<tr>" +
+    Object.values(METHODS).map(m => `<th>${m.replace("Farrington Flexible", "Farrington").replace("This indicator", "Indicator")}</th>`).join("") +
+    "<th>Excess, heat-coded</th><th>Excess, other codes</th></tr>";
+  const rows = yearWaves.map(w => { const b = E.burden.find(x => x.start === w.start) || {};
+    return "<tr>" +
     `<td>${fmt(w.start)}–${fmt(w.end)}</td><td>${w.days}</td><td>${w.peak_tmax.toFixed(1)}</td>` +
     Object.keys(METHODS).map(m => { const f = firstAlarm(m, w);
-      return f === null ? '<td class="miss">✗</td>' : `<td class="hit">day ${f}</td>`; }).join("") + "</tr>").join("");
+      return f === null ? '<td class="miss">✗</td>' : `<td class="hit">day ${f}</td>`; }).join("") +
+    `<td>${sign(b.heat_model)}</td><td>${sign(b.syndrome_model)}</td></tr>`; }).join("");
   document.getElementById("waves").innerHTML = yearWaves.length
     ? `<table>${head}${rows}</table>` : `<p class="note">No heat wave in ${state.year}.</p>`;
 
+  // hidden burden
+  const S = p => E.burden_summary.find(r => r.period === p);
+  const pct = v => Math.round(100 * v) + "%";
+  const brow = (label, r) => `<tr><td>${label}</td><td>${r.heat_waves}</td><td>${sign(r.heat_model)}</td>` +
+    `<td>${sign(r.syndrome_model)}</td><td>${pct(r.share_coded_model)} (${pct(r.share_model_lo)}–${pct(r.share_model_hi)})</td>` +
+    `<td>${pct(r.share_coded_observed)}</td><td>${r.waves_syndrome_excess_positive} of ${r.heat_waves}</td></tr>`;
+  document.getElementById("burden").innerHTML = '<div class="tw"><table><tr><th>Period</th><th>Heat waves</th>' +
+    "<th>Excess, heat-coded</th><th>Excess, other codes</th><th>Coded as heat (95% CI)</th><th>Raw counts</th>" +
+    "<th>Waves above normal</th></tr>" + brow("All, 2016–2026", S("all")) + brow("2016–24", S("development")) +
+    brow("2025–26 (held out)", S("heldout")) + "</table></div>" +
+    '<p class="note">Excess: calls above a normal-temperature day during each heat wave and the 3 days after, from the model ' +
+    "(raw counts are noisier; 2021–22 baselines are pulled down by low volumes in 2020). Only about a third of the " +
+    "heat-associated excess carries a heat code; the rest is coded as unconscious, sick, breathing, cardiac and similar.</p>";
+
   // comparison table
   const get = (p, m) => E.backtest.find(r => r.period === p && r.method === m);
-  document.getElementById("compare").innerHTML = "<table><tr><th>Method</th><th>2016–24 flagged</th><th>false / summer</th>" +
-    "<th>2025–26 flagged</th><th>false / summer</th></tr>" + Object.entries(METHODS).map(([k, label]) => {
+  document.getElementById("compare").innerHTML = "<table><tr><th>Method</th><th>2016–24 flagged</th><th>alerts / summer</th>" +
+    "<th>2025–26 flagged</th><th>alerts / summer</th></tr>" + Object.entries(METHODS).map(([k, label]) => {
       const d = get("development", k), h = get("heldout", k);
       return `<tr class="${k === state.method ? "sel" : ""}"><td>${label}</td><td>${d.detected}/${d.heat_waves}</td>` +
         `<td>${d.false_alarms_per_summer.toFixed(1)}</td><td>${h.detected}/${h.heat_waves}</td>` +
