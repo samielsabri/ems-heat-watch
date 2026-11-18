@@ -1,0 +1,4 @@
+"period","heat_waves","heat_observed","syndrome_observed","heat_model","syndrome_model","share_coded_observed","share_coded_model","share_model_lo","share_model_hi","waves_syndrome_excess_positive"
+"all",23,3379,16364,2752,5470,0.171,0.335,0.263,0.41,20
+"development",20,2339,13867,2000,4851,0.144,0.292,0.233,0.356,18
+"heldout",3,1040,2498,752,618,0.294,0.549,0.413,0.658,2

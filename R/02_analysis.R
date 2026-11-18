@@ -8,13 +8,17 @@
 #
 # Comparison: Farrington Flexible and EARS C1-C3 from the 'surveillance' package, on the same series.
 #
+# Hidden burden: the same model is fitted to heat-related calls not coded as heat (the syndrome in
+# 01_get_data.R). During each heat wave, excess calls over a normal-temperature day are compared between
+# heat-coded calls and the syndrome: how much of the heat-associated excess carries a heat code?
+#
 # Back-test: heat waves = 3+ consecutive days with Tmax >= 32.2 C (90 F). Development 2016-2024, held out
 # 2025 onwards (nothing was tuned on it). Mar-Jul 2020 (COVID) is left out of fitting and scoring.
 
 suppressMessages({library(splines); library(surveillance)})
 dir.create("output", showWarnings = FALSE)
 
-heat <- read.csv("data/heat_calls.csv", colClasses = c("Date", "integer"))
+heat <- read.csv("data/heat_calls.csv", colClasses = c("Date", "integer", "integer"))
 tm <- read.csv("data/tmax.csv", colClasses = c("Date", "numeric"))
 temp <- setNames(tm$tmax, format(tm$date))
 Tmax <- function(dates) unname(temp[format(dates)])
@@ -31,14 +35,18 @@ heat_terms <- function(dates, tfun, T0) {
 }
 
 # 1. Heat threshold T0: the value that best fits 2013-2024 (profile deviance, smooth time trend).
-fit_years <- heat[heat$date >= as.Date("2013-01-01") & heat$date <= train_end & !covid(heat$date), ]
-tt <- as.numeric(fit_years$date - min(fit_years$date)) / 365.25
-dev_for <- function(T0) {
-  x <- cbind(fit_years, heat_terms(fit_years$date, Tmax, T0), dow = weekdays(fit_years$date))
-  deviance(glm(heat_calls ~ ns(tt, df = round(7 * max(tt))) + dow + h0 + h1 + h23, poisson, data = x))
+choose_T0 <- function(y) {
+  fit_years <- heat[heat$date >= as.Date("2013-01-01") & heat$date <= train_end & !covid(heat$date), ]
+  tt <- as.numeric(fit_years$date - min(fit_years$date)) / 365.25
+  dev_for <- function(T0) {
+    x <- cbind(y = fit_years[[y]], heat_terms(fit_years$date, Tmax, T0), dow = weekdays(fit_years$date))
+    deviance(glm(y ~ ns(tt, df = round(7 * max(tt))) + dow + h0 + h1 + h23, poisson, data = x))
+  }
+  grid <- seq(15, 33, by = 0.5)
+  grid[which.min(sapply(grid, dev_for))]
 }
-grid <- seq(15, 33, by = 0.5)
-T0 <- grid[which.min(sapply(grid, dev_for))]
+T0 <- choose_T0("heat_calls")
+T0_syndrome <- choose_T0("syndrome_calls")
 
 # 2. Normal Tmax for each calendar day: 3 harmonics fitted to Tmax up to 2024.
 harm <- function(d) {
@@ -50,25 +58,29 @@ normal_fit <- lm(tmax ~ ., data = cbind(tmax = tn$tmax, harm(tn$date)))
 Tnormal <- function(dates) unname(predict(normal_fit, harm(dates)))
 
 # 3. Prospective indicator, refitted every 7 days on the previous 3 years.
-design <- function(dates, origin, tfun) {
+design <- function(dates, origin, tfun, T0) {
   cbind(trend = as.numeric(dates - origin) / 365.25, harm(dates),
         dow = factor(weekdays(dates), levels = weekdays(as.Date("2024-01-01") + 0:6)),
         heat_terms(dates, tfun, T0))
 }
 upper <- function(mu, phi) if (phi > 1) qnbinom(1 - alpha, size = mu / (phi - 1), mu = mu) else qpois(1 - alpha, mu)
 
-blocks <- seq(eval_start, max(heat$date), by = 7)
-ind <- do.call(rbind, lapply(blocks, function(d0) {
-  train <- heat[heat$date >= seq(d0, by = "-3 years", length.out = 2)[2] & heat$date < d0 & !covid(heat$date), ]
-  origin <- min(train$date)
-  m <- glm(heat_calls ~ ., poisson, data = cbind(heat_calls = train$heat_calls, design(train$date, origin, Tmax)))
-  phi <- sum(residuals(m, "pearson")^2) / df.residual(m)
-  days <- seq(d0, min(d0 + 6, max(heat$date)), by = "day")
-  mu_temp <- predict(m, design(days, origin, Tmax), type = "response")
-  mu_norm <- predict(m, design(days, origin, Tnormal), type = "response")
-  data.frame(date = days, expected_actual_tmax = mu_temp, expected_normal_tmax = mu_norm,
-             upper_limit = sapply(mu_norm, upper, phi = phi))
-}))
+run_indicator <- function(y, T0) {
+  blocks <- seq(eval_start, max(heat$date), by = 7)
+  do.call(rbind, lapply(blocks, function(d0) {
+    train <- heat[heat$date >= seq(d0, by = "-3 years", length.out = 2)[2] & heat$date < d0 & !covid(heat$date), ]
+    origin <- min(train$date)
+    m <- glm(y ~ ., poisson, data = cbind(y = train[[y]], design(train$date, origin, Tmax, T0)))
+    phi <- sum(residuals(m, "pearson")^2) / df.residual(m)
+    days <- seq(d0, min(d0 + 6, max(heat$date)), by = "day")
+    mu_temp <- predict(m, design(days, origin, Tmax, T0), type = "response")
+    mu_norm <- predict(m, design(days, origin, Tnormal, T0), type = "response")
+    data.frame(date = days, expected_actual_tmax = mu_temp, expected_normal_tmax = mu_norm,
+               upper_limit = sapply(mu_norm, upper, phi = phi))
+  }))
+}
+ind <- run_indicator("heat_calls", T0)
+syn <- run_indicator("syndrome_calls", T0_syndrome)
 ind$heat_calls <- heat$heat_calls[match(ind$date, heat$date)]
 ind$tmax <- Tmax(ind$date)
 ind$alarm_indicator <- ind$heat_calls > ind$upper_limit
@@ -122,11 +134,48 @@ backtest <- do.call(rbind, lapply(names(periods), function(p) do.call(rbind, lap
              hot_single_days_flagged = round(mean(a[sel & hot_single_day]), 3))
 }))))
 
+# 6. Hidden burden: excess over a normal-temperature day during each heat wave and the 3 days after,
+#    heat-coded calls vs the syndrome. "observed" = calls minus expected; "model" = expected given the actual
+#    temperature minus expected at normal temperature (smoother, less affected by other causes).
+syn$calls <- heat$syndrome_calls[match(syn$date, heat$date)]
+excess <- function(x, calls, a, b) {
+  k <- x$date >= a & x$date <= b
+  c(observed = sum(calls[k] - x$expected_normal_tmax[k]),
+    model = sum(x$expected_actual_tmax[k] - x$expected_normal_tmax[k]))
+}
+burden <- do.call(rbind, lapply(seq_len(nrow(waves)), function(i) {
+  a <- waves$start[i]; b <- waves$end[i] + 3
+  h <- excess(ind, ind$heat_calls, a, b); s <- excess(syn, syn$calls, a, b)
+  data.frame(start = a, end = waves$end[i], heat_observed = h[["observed"]], heat_model = h[["model"]],
+             syndrome_observed = s[["observed"]], syndrome_model = s[["model"]])
+}))
+burden$period <- ifelse(burden$start >= heldout_start, "heldout", "development")
+share <- function(b, type) sum(b[[paste0("heat_", type)]]) /
+  (sum(b[[paste0("heat_", type)]]) + sum(b[[paste0("syndrome_", type)]]))
+set.seed(1)
+boot <- function(b, type) quantile(replicate(2000, share(b[sample(nrow(b), replace = TRUE), ], type)), c(0.025, 0.975))
+burden_summary <- do.call(rbind, lapply(list(all = burden, development = burden[burden$period == "development", ],
+                                             heldout = burden[burden$period == "heldout", ]), function(b) {
+  data.frame(heat_waves = nrow(b), heat_observed = round(sum(b$heat_observed)), syndrome_observed = round(sum(b$syndrome_observed)),
+             heat_model = round(sum(b$heat_model)), syndrome_model = round(sum(b$syndrome_model)),
+             share_coded_observed = round(share(b, "observed"), 3), share_coded_model = round(share(b, "model"), 3),
+             share_model_lo = round(boot(b, "model")[[1]], 3), share_model_hi = round(boot(b, "model")[[2]], 3),
+             waves_syndrome_excess_positive = sum(b$syndrome_observed > 0))
+}))
+burden_summary <- cbind(period = rownames(burden_summary), burden_summary)
+ind$syndrome_calls <- syn$calls
+ind$syndrome_expected_normal_tmax <- syn$expected_normal_tmax
+ind$syndrome_expected_actual_tmax <- syn$expected_actual_tmax
+
 ind$day_type <- ifelse(covid(d), "excluded", ifelse(in_wave, "heat_wave", ifelse(hot_single_day, "hot_single_day",
                        ifelse(non_heat_day, "cool_summer_day", "other"))))
 write.csv(ind, "output/daily_indicator.csv", row.names = FALSE)
 write.csv(waves, "output/heat_waves.csv", row.names = FALSE)
 write.csv(backtest, "output/backtest.csv", row.names = FALSE)
-writeLines(c(paste("T0", T0), paste("data_to", max(heat$date)), paste("alpha", alpha)), "output/settings.txt")
-cat("T0 =", T0, "C\n")
+write.csv(burden, "output/hidden_burden_by_wave.csv", row.names = FALSE)
+write.csv(burden_summary, "output/hidden_burden.csv", row.names = FALSE)
+writeLines(c(paste("T0", T0), paste("T0_syndrome", T0_syndrome), paste("data_to", max(heat$date)),
+             paste("alpha", alpha)), "output/settings.txt")
+cat("T0 =", T0, "C; syndrome T0 =", T0_syndrome, "C\n")
 print(backtest, row.names = FALSE)
+print(burden_summary, row.names = FALSE)

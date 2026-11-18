@@ -9,12 +9,14 @@ dir.create("docs", showWarnings = FALSE)
 ind <- read.csv("output/daily_indicator.csv", colClasses = c(date = "Date"))
 waves <- read.csv("output/heat_waves.csv", colClasses = c(start = "Date", end = "Date"))
 bt <- read.csv("output/backtest.csv")
-heat <- read.csv("data/heat_calls.csv", colClasses = c("Date", "integer"))
+heat <- read.csv("data/heat_calls.csv", colClasses = c("Date", "integer", "integer"))
+hb <- read.csv("output/hidden_burden.csv")
+hb_all <- hb[hb$period == "all", ]
 
 # --- figure: heat calls in the two held-out summers ---
 ink <- "#0b0b0b"; blue <- "#2a78d6"; red <- "#e34948"; wave <- "#fbe6d6"; grey <- "#6b6a66"
 # quartz on a Mac, cairo elsewhere: neither needs XQuartz on macOS
-png("docs/figure.png", width = 7.5, height = 2.1, units = "in", res = 300,
+png("docs/figure.png", width = 7.5, height = 1.7, units = "in", res = 300,
     type = if (capabilities("aqua")) "quartz" else "cairo")
 par(mfrow = c(1, 2), mar = c(2.2, 3.2, 1.6, 0.6), mgp = c(2, 0.5, 0), tcl = -0.2, cex.axis = 0.75,
     col.axis = grey, fg = "#c9c8c3")
@@ -48,7 +50,7 @@ row <- function(label, m) sprintf(
   "<tr><td>%s</td><td>%d/%d</td><td>%.1f</td><td>%d/%d</td><td>%.1f</td></tr>", label,
   get("development", m, "detected"), get("development", m, "heat_waves"), get("development", m, "false_alarms_per_summer"),
   get("heldout", m, "detected"), get("heldout", m, "heat_waves"), get("heldout", m, "false_alarms_per_summer"))
-ears_row <- sprintf("<tr><td>EARS C1–C3 (CDC)</td><td>%s/%d</td><td>%s</td><td>%s/%d</td><td>%s</td></tr>",
+ears_row <- sprintf("<tr><td>EARS C1–C3</td><td>%s/%d</td><td>%s</td><td>%s/%d</td><td>%s</td></tr>",
   rng("development", "detected"), get("development", "indicator", "heat_waves"),
   rng("development", "false_alarms_per_summer", "%.1f"),
   rng("heldout", "detected"), get("heldout", "indicator", "heat_waves"), rng("heldout", "false_alarms_per_summer", "%.1f"))
@@ -60,7 +62,7 @@ fig <- paste0('<img src="data:image/png;base64,',
               jsonlite::base64_enc(readBin("docs/figure.png", "raw", file.size("docs/figure.png"))), '">')
 
 html <- sprintf('<!doctype html><html><head><meta charset="utf-8"><title>EMS Heat Watch</title><style>
-@page { size: Letter; margin: 0.4in 0.55in; }
+@page { size: Letter; margin: 0.35in 0.5in; }
 :root { --ink: #0b0b0b; --muted: #57564f; --line: #e6e3dc; --blue: #2a78d6; --tint: #f3f7fc; }
 body { font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); font-size: 9.4pt; line-height: 1.38;
        margin: 0; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -70,9 +72,9 @@ h1 { font-size: 19pt; margin: 0 0 3px; letter-spacing: -0.01em; }
 h2 { font-size: 10.5pt; margin: 12px 0 4px; }
 .sub { color: var(--muted); margin: 0; }
 p { margin: 3px 0 6px; } ul { margin: 3px 0 6px 18px; padding: 0; } li { margin-bottom: 3px; }
-.tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 4px 0 6px; }
+.tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin: 4px 0 6px; }
 .tile { background: var(--tint); border-radius: 8px; padding: 9px 12px; }
-.tile b { display: block; font-size: 17pt; color: var(--blue); margin-bottom: 1px; }
+.tile b { display: block; font-size: 16pt; color: var(--blue); margin-bottom: 1px; white-space: nowrap; }
 .tile span, .note, figcaption { color: var(--muted); font-size: 8.6pt; }
 table { border-collapse: collapse; width: 100%%; font-size: 9.2pt; font-variant-numeric: tabular-nums; }
 th, td { padding: 4px 8px; border-bottom: 1px solid var(--line); text-align: right; }
@@ -91,61 +93,76 @@ figure img { width: 100%%; height: auto; display: block; } figcaption { margin-t
           box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 8px 24px rgba(0,0,0,.06); }
 }
 @media print {
-  body { font-size: 9pt; line-height: 1.32; } h1 { font-size: 17pt; } h2 { margin: 8px 0 3px; }
-  header { padding-bottom: 6px; margin-bottom: 8px; } .tile { padding: 6px 10px; } .tile b { font-size: 15pt; }
+  body { font-size: 8.8pt; line-height: 1.3; } h1 { font-size: 17pt; } h2 { margin: 7px 0 3px; }
+  header { padding-bottom: 6px; margin-bottom: 8px; } .tile { padding: 6px 9px; } .tile b { font-size: 14pt; }
   figure { padding: 4px 8px 4px; margin: 6px 0 2px; } li { margin-bottom: 2px; }
 }
 @media screen and (max-width: 700px) {
-  .page { margin: 0; padding: 20px 16px; border-radius: 0; } .tiles, .cols { grid-template-columns: 1fr; }
+  .page { margin: 0; padding: 20px 16px; border-radius: 0; } .cols { grid-template-columns: 1fr; }
+  .tiles { grid-template-columns: 1fr 1fr; }
 }
 </style></head><body><main class="page">
 <header><h1>EMS Heat Watch</h1>
-<p class="sub">Can ambulance calls show the health impact of heat within days? A proof of concept on public New York City data.<br>%sgithub.com/samielsabri/ems-heat-watch</p></header>
+<p class="sub">Can paramedic data give early warning of heat&#39;s health impact, and measure the burden that heat-coded
+records miss? A proof of concept on public New York City data.<br>%sgithub.com/samielsabri/ems-heat-watch</p></header>
 <div class="tiles">
-<div class="tile"><b>%d of %d</b><span>recent heat waves (2025–26, held out) flagged on their first day</span></div>
-<div class="tile"><b>~%.0f per summer</b><span>false alarms on ordinary summer days (2016–24)</span></div>
-<div class="tile"><b>%d days</b><span>lag of NYC&#39;s public data today, vs months for hospital and mortality data</span></div>
+<div class="tile"><b>Day 1</b><span>heat waves flagged on day one: %d/%d held out (2025–26), %d/%d in 2016–24</span></div>
+<div class="tile"><b>About 1 in 3</b><span>of heat-associated excess calls carry a heat code (%d%%, 95%% CI %d–%d%%)</span></div>
+<div class="tile"><b>~%.0f per summer</b><span>alerts outside heat waves (2016–24): low alert fatigue</span></div>
+<div class="tile"><b>Days, not months</b><span>public NYC data is %d days behind; an internal feed would be same-day</span></div>
 </div>
-<h2>Why</h2>
-<p>The health impact of heat is usually measured with hospital and mortality data that arrive months later. Ambulance
-dispatch data exist in near real time in every paramedic service, but are rarely used for heat surveillance.</p>
 <h2>What I did</h2>
 <ul>
-<li><b>Data:</b> daily counts of NYC ambulance calls coded <i>heat</i> (about %d a year), 2010 to %s, and daily maximum
-temperature at Central Park.</li>
-<li><b>Indicator:</b> each day, compare heat calls with the number expected on a normal-temperature day at that time of year.
-Alarm when calls are above the expected range.</li>
-<li><b>Test:</b> replay 2016–2026 day by day, using only past data, and check every heat wave (3+ days at 32 °C or more).
-Compare with two standard outbreak-detection methods. Nothing was tuned on 2025–26.</li>
+<li><b>Data:</b> daily NYC ambulance calls, 2010 to %s: coded <i>heat</i> (about %d a year), and heat-related calls with other
+codes chosen in advance (unconscious, altered mental status, sick, breathing, cardiac, respiratory, arrest). Central Park Tmax.</li>
+<li><b>Early warning:</b> each day, compare heat calls with the number expected on a normal-temperature day at that time of year;
+alert when above the expected range. Tested by replaying 2016–2026 day by day on past data only, against every heat wave
+(3+ days at 32 °C or more). Nothing was tuned on 2025–26.</li>
+<li><b>Hidden burden:</b> the same model on the other heat-related calls; during each heat wave, compare their excess over a
+normal-temperature day with the excess in heat-coded calls.</li>
 </ul>
 <h2>Results</h2>
 <table><thead><tr><th></th><th colspan="2">2016–24 (development)</th><th colspan="2">2025–26 (held out)</th></tr>
-<tr><th>Method</th><th>Heat waves flagged</th><th>False alarms / summer</th><th>Heat waves flagged</th><th>False alarms / summer</th></tr></thead>
+<tr><th>Method</th><th>Heat waves flagged</th><th>Alerts / summer*</th><th>Heat waves flagged</th><th>Alerts / summer*</th></tr></thead>
 <tbody>%s%s%s</tbody></table>
-<p class="note">Analysis in R; Farrington and EARS from the <i>surveillance</i> package. False alarms are counted on cool summer days.</p>
+<p class="note">*Outside heat waves. Farrington Flexible is the standard method for routine communicable disease surveillance;
+EARS is the CDC&#39;s syndromic method (both from the R <i>surveillance</i> package). The new indicator catches more heat waves
+than Farrington for about two extra alerts a summer.</p>
+<p><b>Hidden burden:</b> across %d heat waves, the model attributes %s extra heat-coded calls and %s extra calls with other
+heat-related codes, so only about a third of the heat-associated excess (%d%%) is labelled as heat. Raw counts suggest even less
+(%d%%). The other calls were above normal in %d of %d heat waves.</p>
 <figure>%s
-<figcaption>Heat calls per day in the two held-out summers. Black: observed. Blue line and band: expected on a normal-temperature
-day, and its normal range. Red circles: alarms. Shaded: heat waves.</figcaption></figure>
+<figcaption>Heat-coded calls per day in the two held-out summers. Black: observed. Blue line and band: expected on a normal-temperature
+day, and its normal range. Red circles: alerts. Shaded: heat waves.</figcaption></figure>
 <div class="cols"><div>
-<h2>What it means for Toronto</h2>
+<h2>What it could mean for Toronto</h2>
 <ul>
-<li>Environment and Climate Change Canada warns 18–24 hours ahead for heat events of two or more days. An EMS indicator adds
-the health side: is the heat causing harm, and how much? It does not predict heat; it confirms impact the same day.</li>
-<li>Single hot days usually get no warning. In NYC the indicator flagged %d%% of them (2016–24).</li>
-<li>Next step: the same indicator on Toronto Paramedic Services data, using humidex.</li>
+<li>ECCC warns 18–24 hours ahead for heat events of 2+ days. Paramedic data adds the health side: is heat causing harm, and how
+much, including harm not labelled as heat. Single hot days rarely get a warning; the indicator flagged %d%% of them.</li>
+<li><b>Plan:</b> aggregated daily Toronto Paramedic Services counts by call type; humidex; Toronto&#39;s 158 neighbourhoods.
+Open question: does Toronto&#39;s dispatch record a heat or exposure code? If not, the other-codes approach carries the signal.</li>
 </ul>
 </div><div>
 <h2>Limits</h2>
 <ul>
 <li>Dispatch codes record what callers and crews report, not diagnoses.</li>
-<li>Only three heat waves in the held-out period. NYC data and one weather station; not yet tested in Toronto.</li>
+<li>The other-codes excess is noisy: below normal in %d of %d heat waves; 2021–22 baselines are pulled down by 2020.</li>
+<li>Three held-out heat waves. NYC data, one weather station; not yet tested in Toronto.</li>
 </ul>
 </div></div>
 </main></body></html>',
-  by, get("heldout", "indicator", "detected"), get("heldout", "indicator", "heat_waves"),
-  get("development", "indicator", "false_alarms_per_summer"), lag, per_year, format(last, "%B %Y"),
-  row("This indicator", "indicator"), row("Farrington Flexible", "farrington"), ears_row, fig,
-  round(100 * get("development", "indicator", "hot_single_days_flagged")))
+  by,
+  get("heldout", "indicator", "detected"), get("heldout", "indicator", "heat_waves"),
+  get("development", "indicator", "detected"), get("development", "indicator", "heat_waves"),
+  round(100 * hb_all$share_coded_model), round(100 * hb_all$share_model_lo), round(100 * hb_all$share_model_hi),
+  get("development", "indicator", "false_alarms_per_summer"), lag,
+  format(last, "%B %Y"), per_year,
+  row("This indicator", "indicator"), row("Farrington Flexible", "farrington"), ears_row,
+  hb_all$heat_waves, format(hb_all$heat_model, big.mark = ","), format(hb_all$syndrome_model, big.mark = ","),
+  round(100 * hb_all$share_coded_model), round(100 * hb_all$share_coded_observed),
+  hb_all$waves_syndrome_excess_positive, hb_all$heat_waves, fig,
+  round(100 * get("development", "indicator", "hot_single_days_flagged")),
+  hb_all$heat_waves - hb_all$waves_syndrome_excess_positive, hb_all$heat_waves)
 writeLines(html, "docs/summary.html")
 
 browsers <- c("Google Chrome.app/Contents/MacOS/Google Chrome", "Chromium.app/Contents/MacOS/Chromium",
