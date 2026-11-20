@@ -12,8 +12,9 @@ Owner is an epidemiologist/data scientist: be direct, concise, don't over-explai
                      EARS C1-C3 from `surveillance`, heat-wave back-test, hidden burden (same model on the syndrome;
                      excess vs normal Tmax per wave+3 days; bootstrap CI over waves) -> output/
 - `R/03_summary.R`   docs/figure.png, docs/summary.html, docs/summary.pdf (headless Chrome if present; Safari: export)
-- `R/04_dashboard_data.R` docs/dashboard_data.js for the static dashboard docs/index.html (Plotly 2.35.2 from jsDelivr;
-                     GitHub Pages from main /docs). 02_analysis.R writes a day_type column used by the dashboard.
+- `R/04_dashboard_data.R` dashboard_data.js -> docs/ and, if present, ../samielsabri.github.io/dashboards/ems_heat_watch/.
+                     The LIVE dashboard is in the website repo (ems_heat_watch.html there); docs/index.html is the local
+                     source copy. No GitHub Pages on this repo. Light mode only.
 - The earlier Python pipeline (store, HTML report, zip ratios, synthetic tests, call-type screen) lives on branch
   `full-pipeline`. Don't bring it back to main unless asked.
 
