@@ -10,8 +10,7 @@ miss? A proof of concept on public New York City data.
   (34%, 95% CI 26–41%, 23 heat waves). The rest are coded as unconscious, sick, breathing, cardiac and similar.
 - **Timeliness:** hospital and mortality data arrive months after a heat event. Paramedic data exist the same day.
 
-One-page summary: [docs/summary.pdf](docs/summary.pdf) · Interactive dashboard:
-https://samielsabri.me/dashboards/ems_heat_watch/ems_heat_watch.html
+One-page summary: [docs/summary.pdf](docs/summary.pdf) · Interactive dashboard: https://samielsabri.me/ems-heat-watch/
 
 ## How it works
 
@@ -29,8 +28,8 @@ https://samielsabri.me/dashboards/ems_heat_watch/ems_heat_watch.html
 3. **Hidden burden** (same script): the same model is fitted to the other heat-related calls. During each heat
    wave and the three days after, the excess over a normal-temperature day is compared between heat-coded calls
    and the other calls.
-4. **Summary** (`R/03_summary.R`) and **dashboard data** (`R/04_dashboard_data.R`, which also updates the copy in
-   the website repo when it sits next to this one).
+4. **Summary** (`R/03_summary.R`) and **dashboard** (`R/04_dashboard_data.R`). GitHub Pages publishes `docs/`
+   at https://samielsabri.me/ems-heat-watch/, so pushing to `main` updates the live dashboard.
 
 ## Results
 
@@ -61,7 +60,7 @@ Rscript -e 'install.packages(c("jsonlite", "surveillance"))'
 Rscript R/01_get_data.R              # optional, refreshes data/
 Rscript R/02_analysis.R              # about 3 minutes
 Rscript R/03_summary.R              # writes docs/summary.pdf if Chrome is installed
-Rscript R/04_dashboard_data.R       # updates the dashboard data (local and website copy)
+Rscript R/04_dashboard_data.R       # updates docs/dashboard_data.js (live after pushing to main)
 ```
 
 In RStudio: open `ems-heat-watch.Rproj`, then open each script in `R/` and click Source.

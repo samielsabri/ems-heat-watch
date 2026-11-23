@@ -1,6 +1,5 @@
-# Data for the dashboard: writes dashboard_data.js from output/.
-# The live dashboard is on the website (samielsabri.github.io repo, dashboards/ems_heat_watch/). If that repo
-# sits next to this one, the file is written there too; docs/ keeps a local copy for docs/index.html.
+# Data for the dashboard: writes docs/dashboard_data.js from output/.
+# docs/ is published by GitHub Pages at https://samielsabri.me/ems-heat-watch/ - push to main and it is live.
 
 library(jsonlite)
 ind <- read.csv("output/daily_indicator.csv")
@@ -23,8 +22,3 @@ data <- list(daily = daily, waves = waves, backtest = bt, burden = burden, burde
 js <- paste0("window.EMS = ", toJSON(data, dataframe = "rows", auto_unbox = TRUE, digits = NA), ";")
 writeLines(js, "docs/dashboard_data.js")
 cat("wrote docs/dashboard_data.js\n")
-site <- "../samielsabri.github.io/dashboards/ems_heat_watch"
-if (dir.exists(site)) {
-  writeLines(js, file.path(site, "dashboard_data.js"))
-  cat("wrote", file.path(site, "dashboard_data.js"), "- commit and push the website repo to publish\n")
-}
