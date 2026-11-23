@@ -140,7 +140,7 @@ day, and its normal range. Red circles: alerts. Shaded: heat waves.</figcaption>
 <li>ECCC warns 18–24 hours ahead for heat events of 2+ days. Paramedic data adds the health side: is heat causing harm, and how
 much, including harm not labelled as heat. Single hot days rarely get a warning; the indicator flagged %d%% of them.</li>
 <li><b>Plan:</b> aggregated daily Toronto Paramedic Services counts by call type; humidex; Toronto&#39;s 158 neighbourhoods.
-Open question: does Toronto&#39;s dispatch record a heat or exposure code? If not, the other-codes approach carries the signal.</li>
+Implementation depends on whether Toronto&#39;s dispatch record a heat or exposure code. Otherwise, the other-codes approach carries the signal.</li>
 </ul>
 </div><div>
 <h2>Limits</h2>
